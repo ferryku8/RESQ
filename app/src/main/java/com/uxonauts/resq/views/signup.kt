@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.uxonauts.resq.controllers.AuthController
+import com.uxonauts.resq.views.ui.theme.ResqBlue
+import com.uxonauts.resq.views.ui.theme.ResqLightBlue
 
 @Composable
 fun SignUpHostScreen(navController: NavController, controller: AuthController) {

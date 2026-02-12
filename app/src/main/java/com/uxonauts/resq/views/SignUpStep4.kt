@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.uxonauts.resq.controllers.AuthController
+import com.uxonauts.resq.views.ui.theme.ResqBlue
 
 
 @Composable

@@ -15,6 +15,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.uxonauts.resq.controllers.AuthController
+import com.uxonauts.resq.views.ui.theme.ResqBlue
+import com.uxonauts.resq.views.ui.theme.ResqLightBlue
+import com.uxonauts.resq.views.ui.theme.TextGray
 
 @Composable
 fun SignUpStep2(controller: AuthController) {

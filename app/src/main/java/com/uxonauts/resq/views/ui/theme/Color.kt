@@ -1,4 +1,4 @@
-package com.uxonauts.resq.views
+package com.uxonauts.resq.views.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

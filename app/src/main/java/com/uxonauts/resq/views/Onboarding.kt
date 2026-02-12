@@ -15,6 +15,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.uxonauts.resq.views.ui.theme.ResqBlue
+import com.uxonauts.resq.views.ui.theme.ResqLightBlue
+import com.uxonauts.resq.views.ui.theme.TextGray
 
 @Composable
 fun OnboardingScreen(navController: NavController) {

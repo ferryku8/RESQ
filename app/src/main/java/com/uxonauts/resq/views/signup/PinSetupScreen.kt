@@ -1,4 +1,4 @@
-package com.uxonauts.resq.views
+package com.uxonauts.resq.views.signup
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,7 +28,7 @@ fun PinSetupScreen(navController: NavController, controller: AuthController) {
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 36.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Top
+        verticalArrangement = Arrangement.Center
     ) {
         Text("Buat PIN Keamanan", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ResqBlue)
         Spacer(modifier = Modifier.height(16.dp))

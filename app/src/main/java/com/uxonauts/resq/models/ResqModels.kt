@@ -6,6 +6,7 @@ data class User(
     val email: String = "",
     val noTelepon: String = "",
     val jenisKelamin: String = "",
+    val tglLahir: java.util.Date? = null,
     val alamat: String = "",
     val ktpImageUrl: String = "",
     val pin: String = ""

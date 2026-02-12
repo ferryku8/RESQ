@@ -1,4 +1,4 @@
-package com.uxonauts.resq.views
+package com.uxonauts.resq.views.signup
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

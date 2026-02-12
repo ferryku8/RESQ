@@ -1,11 +1,15 @@
-package com.uxonauts.resq.views
+package com.uxonauts.resq.views.signup
 
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.uxonauts.resq.controllers.AuthController
+import com.uxonauts.resq.views.login.LoginScreen
+import com.uxonauts.resq.views.login.OnboardingScreen
+
 
 @Composable
 fun ResqAuthApp() {
@@ -24,7 +28,7 @@ fun ResqAuthApp() {
         // Rute Home (Placeholder sementara biar gak crash kalau di-navigate)
         composable("home") {
             // Nanti diganti dengan HomeScreen beneran
-            androidx.compose.material3.Text("Selamat Datang di Home Screen!")
+            Text("Selamat Datang di Home Screen!")
         }
     }
 }

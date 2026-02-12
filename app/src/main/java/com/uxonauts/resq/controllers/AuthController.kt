@@ -2,26 +2,28 @@ package com.uxonauts.resq.controllers
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import android.util.Patterns
 import androidx.compose.runtime.*
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.uxonauts.resq.models.*
-import com.google.android.gms.tasks.Task
 import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.security.MessageDigest
 import java.util.UUID
 
 class AuthController : ViewModel() {
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
+    private val storage = FirebaseStorage.getInstance()
 
     var isLoading by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
@@ -43,6 +45,7 @@ class AuthController : ViewModel() {
     var firstName by mutableStateOf("")
     var lastName by mutableStateOf("")
     var gender by mutableStateOf("Laki-laki")
+    var dateOfBirth by mutableStateOf("")
     var address by mutableStateOf("")
     var phone by mutableStateOf("")
     var email by mutableStateOf("")
@@ -75,7 +78,9 @@ class AuthController : ViewModel() {
     fun isStep1Valid(): Boolean {
         val isEmailValid = Patterns.EMAIL_ADDRESS.matcher(email).matches()
         return firstName.isNotBlank() &&
-                gender.isNotBlank() && address.isNotBlank() &&
+                gender.isNotBlank() &&
+                dateOfBirth.isNotBlank() &&
+                address.isNotBlank() &&
                 phone.isNotBlank() && isEmailValid &&
                 password.length >= 6
     }
@@ -88,15 +93,12 @@ class AuthController : ViewModel() {
         return height.isNotBlank() && weight.isNotBlank() && bloodType.isNotBlank()
     }
 
-    // Validasi form kontak saat ini (Bukan validasi wajib submit)
+    // Validasi Kontak Darurat
     fun isStep4ContactValid(): Boolean {
-        return ecFirstName.isNotBlank() &&
-                ecRelation.isNotBlank() && ecPhone.isNotBlank()
+        return ecFirstName.isNotBlank() && ecRelation.isNotBlank() && ecPhone.isNotBlank()
     }
 
-    // Helper: Cek apakah nomor darurat sama dengan nomor user sendiri
     fun isSelfNumber(): Boolean {
-        // Normalisasi nomor (hapus spasi/-) untuk perbandingan yang adil
         val myPhone = phone.replace(Regex("[^0-9]"), "")
         val contactPhone = ecPhone.replace(Regex("[^0-9]"), "")
         return myPhone == contactPhone && myPhone.isNotEmpty()
@@ -108,51 +110,44 @@ class AuthController : ViewModel() {
         }
     }
 
+    private fun hashPin(pin: String): String {
+        val bytes = pin.toByteArray()
+        val md = MessageDigest.getInstance("SHA-256")
+        val digest = md.digest(bytes)
+        return digest.fold("") { str, it -> str + "%02x".format(it) }
+    }
+
     fun validateKtpImage(context: Context, uri: Uri) {
         isKtpValidating = true
         errorMessage = null
-
         try {
             val image = InputImage.fromFilePath(context, uri)
             val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
                     val text = visionText.text.uppercase()
                     val isValidKtp = text.contains("NIK") || text.contains("PROVINSI") ||
                             text.contains("KABUPATEN") || text.contains("KOTA") ||
                             text.contains("KARTU TANDA PENDUDUK")
-
                     if (isValidKtp) {
                         ktpImageUri = uri
-                        errorMessage = null
                     } else {
                         ktpImageUri = null
                         errorMessage = "Foto tidak terdeteksi sebagai KTP yang valid."
                     }
                     isKtpValidating = false
                 }
-                .addOnFailureListener { e ->
+                .addOnFailureListener {
                     ktpImageUri = null
-                    errorMessage = "Gagal memindai foto: ${e.localizedMessage}"
                     isKtpValidating = false
                 }
         } catch (e: Exception) {
-            ktpImageUri = null
-            errorMessage = "Gagal memuat gambar: ${e.localizedMessage}"
             isKtpValidating = false
         }
     }
 
     fun addEmergencyContact() {
-        errorMessage = null
-        if (isStep4ContactValid()) {
-            // Cek Nomor Sendiri
-            if (isSelfNumber()) {
-                errorMessage = "Nomor kontak darurat tidak boleh sama dengan nomor Anda sendiri."
-                return
-            }
-
+        if (isStep4ContactValid() && !isSelfNumber()) {
             savedContacts.add(
                 EmergencyContact(
                     contactId = UUID.randomUUID().toString(),
@@ -162,7 +157,6 @@ class AuthController : ViewModel() {
                     noTelepon = ecPhone
                 )
             )
-            // Reset Form
             ecFirstName = ""
             ecLastName = ""
             ecRelation = "Keluarga"
@@ -178,7 +172,7 @@ class AuthController : ViewModel() {
                 auth.signInWithEmailAndPassword(loginEmail, loginPassword).await()
                 navController.navigate("home") { popUpTo(0) }
             } catch (e: Exception) {
-                errorMessage = "Gagal masuk: ${e.localizedMessage}"
+                errorMessage = e.localizedMessage
             } finally {
                 isLoading = false
             }
@@ -190,22 +184,39 @@ class AuthController : ViewModel() {
             isLoading = true
             errorMessage = null
             try {
-                // 1. Buat Akun
+                // 1. Buat Akun Firebase Auth
                 val authResult = auth.createUserWithEmailAndPassword(email, password).await()
-                val uid = authResult.user?.uid ?: throw Exception("Gagal mendapatkan ID Pengguna")
+                val uid = authResult.user?.uid ?: throw Exception("Gagal mendapatkan ID")
 
-                // 2. Simpan Data User
+                // 2. Upload KTP ke Firebase Storage (AMAN: Cek null dan try-catch)
+                var downloadUrl = ""
+                if (ktpImageUri != null) {
+                    try {
+                        val storageRef = storage.reference.child("ktp_images/$uid.jpg")
+                        storageRef.putFile(ktpImageUri!!).await()
+                        downloadUrl = storageRef.downloadUrl.await().toString()
+                    } catch (e: Exception) {
+                        Log.e("UploadKTP", "Gagal upload KTP: ${e.message}")
+                        // Lanjutkan pendaftaran meskipun upload gagal (opsional, bisa diubah)
+                    }
+                }
+
+                // 3. Simpan Data User Utama
                 val newUser = User(
                     userId = uid,
                     namaLengkap = "$firstName $lastName".trim(),
                     email = email,
                     noTelepon = phone,
                     jenisKelamin = gender,
-                    alamat = address
+                    alamat = address,
+                    ktpImageUrl = downloadUrl,
+                    tglLahir = try {
+                        java.text.SimpleDateFormat("d/M/yyyy", java.util.Locale.getDefault()).parse(dateOfBirth)
+                    } catch (e: Exception) { null }
                 )
                 db.collection("users").document(uid).set(newUser).await()
 
-                // 3. Simpan Data Medis
+                // 4. Simpan Data Medis
                 val newMedInfo = MedicalInfo(
                     userId = uid,
                     golDarah = bloodType,
@@ -217,10 +228,8 @@ class AuthController : ViewModel() {
                 )
                 db.collection("medical_info").document(uid).set(newMedInfo).await()
 
-                // 4. Simpan Kontak Darurat
+                // 5. Simpan Kontak Darurat
                 val allContactsToSave = savedContacts.toMutableList()
-
-                // Jika form terakhir terisi valid DAN bukan nomor sendiri, simpan juga
                 if (isStep4ContactValid() && !isSelfNumber()) {
                     allContactsToSave.add(
                         EmergencyContact(
@@ -234,16 +243,12 @@ class AuthController : ViewModel() {
                 }
 
                 for (contact in allContactsToSave) {
-                    val finalContact = contact.copy(userId = uid)
-                    db.collection("emergency_contacts").document(finalContact.contactId).set(finalContact).await()
+                    db.collection("emergency_contacts").document(contact.contactId).set(contact.copy(userId = uid)).await()
                 }
 
-                navController.navigate("pin_setup") {
-                    popUpTo("signup") { inclusive = true }
-                }
-
+                navController.navigate("pin_setup") { popUpTo("signup") { inclusive = true } }
             } catch (e: Exception) {
-                errorMessage = e.localizedMessage
+                errorMessage = "Gagal Pendaftaran: ${e.localizedMessage}"
             } finally {
                 isLoading = false
             }
@@ -255,15 +260,15 @@ class AuthController : ViewModel() {
             isLoading = true
             try {
                 val uid = auth.currentUser?.uid ?: return@launch
-                db.collection("users").document(uid).update(
-                    mapOf(
-                        "pin" to pinCode,
-                        "biometricEnabled" to isBiometricEnabled
-                    )
-                ).await()
-                navController.navigate("home") {
-                    popUpTo(0)
-                }
+                val hashedPin = hashPin(pinCode)
+
+                val updates = mapOf<String, Any>(
+                    "pin" to hashedPin,
+                    "biometricEnabled" to isBiometricEnabled
+                )
+
+                db.collection("users").document(uid).update(updates).await()
+                navController.navigate("home") { popUpTo(0) }
             } catch (e: Exception) {
                 errorMessage = "Gagal menyimpan keamanan: ${e.localizedMessage}"
             } finally {

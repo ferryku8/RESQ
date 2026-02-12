@@ -1,4 +1,4 @@
-package com.uxonauts.resq.views
+package com.uxonauts.resq.views.signup
 
 import android.widget.Toast
 import androidx.biometric.BiometricManager
@@ -77,7 +77,7 @@ fun BiometricSetupScreen(navController: NavController, controller: AuthControlle
     Column(
         modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 36.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Top
+        verticalArrangement = Arrangement.Center
     ) {
         Icon(
             imageVector = Icons.Default.Fingerprint,

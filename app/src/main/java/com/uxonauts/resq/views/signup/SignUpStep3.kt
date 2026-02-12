@@ -1,4 +1,4 @@
-package com.uxonauts.resq.views
+package com.uxonauts.resq.views.signup
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn

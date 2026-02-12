@@ -12,8 +12,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.resq.controller.AuthController
-import com.example.resq.ui.theme.*
+import com.uxonauts.resq.controllers.AuthController
+import com.uxonauts.resq.ui.theme.*
 
 @Composable
 fun SignUpStep3(controller: AuthController) {

@@ -16,5 +16,15 @@ fun ResqAuthApp() {
         composable("onboarding") { OnboardingScreen(navController) }
         composable("login") { LoginScreen(navController, authController) }
         composable("signup") { SignUpHostScreen(navController, authController) }
+
+        // Rute Baru:
+        composable("pin_setup") { PinSetupScreen(navController, authController) }
+        composable("biometric_setup") { BiometricSetupScreen(navController, authController) }
+
+        // Rute Home (Placeholder sementara biar gak crash kalau di-navigate)
+        composable("home") {
+            // Nanti diganti dengan HomeScreen beneran
+            androidx.compose.material3.Text("Selamat Datang di Home Screen!")
+        }
     }
 }

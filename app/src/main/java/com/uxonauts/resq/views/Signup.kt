@@ -22,9 +22,9 @@ import com.uxonauts.resq.views.ui.theme.ResqLightBlue
 
 @Composable
 fun SignUpHostScreen(navController: NavController, controller: AuthController) {
-    Column(modifier = Modifier.fillMaxSize().background(Color.White)) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // App Bar & Back Button
-        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 36.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.ArrowBack, contentDescription = "Back", modifier = Modifier.clickable {
                 if (controller.currentSignUpStep > 1) controller.currentSignUpStep-- else navController.popBackStack()
             })
@@ -33,7 +33,7 @@ fun SignUpHostScreen(navController: NavController, controller: AuthController) {
         }
 
         // Custom Progress Bar
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 36.dp), verticalAlignment = Alignment.CenterVertically) {
             for (i in 1..4) {
                 Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(if (i <= controller.currentSignUpStep) ResqBlue else ResqLightBlue), contentAlignment = Alignment.Center) {
                     Text("$i", color = Color.White, fontWeight = FontWeight.Bold)
@@ -43,7 +43,7 @@ fun SignUpHostScreen(navController: NavController, controller: AuthController) {
         }
 
         // Konten Dinamis Step 1-4
-        Box(modifier = Modifier.weight(1f).padding(horizontal = 24.dp)) {
+        Box(modifier = Modifier.weight(1f).padding(horizontal = 42.dp)) {
             when (controller.currentSignUpStep) {
                 1 -> SignUpStep1(controller)
                 2 -> SignUpStep2(controller)

@@ -40,19 +40,19 @@ fun OnboardingScreen(navController: NavController) {
         }
         Spacer(modifier = Modifier.height(32.dp))
         Text(
-            text = if (currentPage == 1) "SOS Darurat Cepat" else if (currentPage == 2) "Laporan & Info" else "Profil Medis",
+            text = if (currentPage == 1) "SOS Darurat Cepat" else if (currentPage == 2) "Laporan Non-Darurat & Info" else "Profil & Kontak Darurat",
             fontSize = 24.sp, fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "Langkah ${currentPage} dari 3: Penjelasan fitur aplikasi RESQ.",
+            text = if (currentPage == 1) "Tekan tombol SOS saat darurat. Lokasi & info Anda langsung terkirim ke pihak berwenang dan kontak darurat terdekat" else if (currentPage == 2) "Buat laporan non-darurat seperti kehilangan atau peniupuan, serta dapatkan artikel & tips kesiapsiagaan penting." else "Lengkapi data medis penting (alergi, golongan darah) dan daftarkan kontak darurat Anda untuk penanganan yang lebih personal & cepat",
             textAlign = TextAlign.Center, color = TextGray
         )
         Spacer(modifier = Modifier.height(48.dp))
         Button(
             onClick = {
                 if (currentPage < 3) currentPage++
-                else navController.navigate("login") { popUpTo("onboarding") { inclusive = true } }
+                else navController.navigate("login")
             },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             colors = ButtonDefaults.buttonColors(containerColor = ResqBlue),

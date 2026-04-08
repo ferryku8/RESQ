@@ -27,8 +27,23 @@ fun ResqAuthApp() {
 
         // Rute Home (Placeholder sementara biar gak crash kalau di-navigate)
         composable("home") {
-            // Nanti diganti dengan HomeScreen beneran
-            Text("Selamat Datang di Home Screen!")
+            com.uxonauts.resq.views.home.HomeScreen(
+                onSosClick = {
+                    // Navigasi ke rute SOS
+                    navController.navigate("sos_flow")
+                }
+            )
+        }
+
+// Dan jangan lupa tambahkan rute SOS di NavHost
+        composable("sos_flow") {
+            val currentUser = FirebaseAuth.getInstance().currentUser
+            val uid = currentUser?.uid ?: ""
+
+            com.uxonauts.resq.views.sos.SosSystemFlow(
+                onNavigateBack = { navController.popBackStack() },
+                userId = uid
+            )
         }
     }
 }

@@ -13,6 +13,9 @@ val Pink40 = Color(0xFF7D5260)
 // Warna Utama Aplikasi RESQ
 val ResqBlue = Color(0xFF0084FF)
 val ResqLightBlue = Color(0xFFB3D9FF)
-val ResqBackground = Color(0xFFFBFBFB) // Warna Background Baru
+val ResqBackground = Color(0xFFFBFBFB)
+val ResqRed = Color(0xFFFF3B30) // Warna Merah untuk SOS
+val ResqRedLight = Color(0xFFFFE5E5) // Warna Merah Muda untuk background SOS
 val TextGray = Color(0xFF666666)
 val TextBlack = Color(0xFF222222)
+val CardBorder = Color(0xFFEEEEEE) // Warna border untuk card di HomeScreen

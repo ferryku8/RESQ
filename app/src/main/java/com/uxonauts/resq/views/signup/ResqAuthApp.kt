@@ -6,7 +6,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.google.firebase.auth.FirebaseAuth
 import com.uxonauts.resq.controllers.AuthController
+import com.uxonauts.resq.views.home.SosSystemFlow
 import com.uxonauts.resq.views.login.LoginScreen
 import com.uxonauts.resq.views.login.OnboardingScreen
 
@@ -37,12 +39,12 @@ fun ResqAuthApp() {
 
 // Dan jangan lupa tambahkan rute SOS di NavHost
         composable("sos_flow") {
-            val currentUser = FirebaseAuth.getInstance().currentUser
-            val uid = currentUser?.uid ?: ""
+            val firebaseAuth = FirebaseAuth.getInstance()
+            val currentUserId = firebaseAuth.currentUser?.uid ?: ""
 
-            com.uxonauts.resq.views.sos.SosSystemFlow(
+            SosSystemFlow(
                 onNavigateBack = { navController.popBackStack() },
-                userId = uid
+                userId = currentUserId // Ini SANGAT PENTING agar Firestore tahu data siapa yang harus diambil
             )
         }
     }

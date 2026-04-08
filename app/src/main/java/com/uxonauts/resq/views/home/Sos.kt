@@ -1,4 +1,4 @@
-package com.uxonauts.resq.views.sos
+package com.uxonauts.resq.views.home
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -416,7 +416,7 @@ fun SosMapScreen(
                     Spacer(modifier = Modifier.width(16.dp))
 
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Jacob Jonas", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                        Text("${userProfile.name}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.LocalPolice, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))

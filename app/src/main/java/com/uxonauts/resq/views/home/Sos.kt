@@ -1,6 +1,9 @@
 package com.uxonauts.resq.views.home
 
-import androidx.compose.foundation.Canvas
+import android.Manifest
+import android.content.pm.PackageManager
+import android.location.Geocoder
+import android.preference.PreferenceManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,25 +19,30 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.Manifest
-import android.content.pm.PackageManager
-import android.location.Geocoder
-import androidx.core.content.ContextCompat
+import androidx.compose.ui.viewinterop.AndroidView
+import android.widget.Toast
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
+import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
-import com.google.android.gms.location.CancellationTokenSource
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -144,6 +152,8 @@ fun SosSystemFlow(
                 SosMapScreen(
                     category = selectedCategory,
                     location = currentLocation,
+                    latitude = userLat,
+                    longitude = userLng,
                     userProfile = currentUserData,
                     onBackClick = { currentStep = SosStep.CATEGORIES }
                 )
@@ -267,47 +277,169 @@ fun SosSystemFlow(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SosCategoryScreen(
-    onBackClick: () -> Unit,
-    onCategoryClick: (String) -> Unit
+fun FingerprintBottomSheet(
+    onDismiss: () -> Unit,
+    onAuthenticated: () -> Unit
 ) {
-    Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("SOS", fontWeight = FontWeight.Bold, fontSize = 24.sp) },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Kembali")
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color(0xFFFBFBFB)
-                )
-            )
-        },
-        containerColor = Color(0xFFFBFBFB)
-    ) { paddingValues ->
-        val categories = listOf(
-            SosCategory("Kecelakaan", Icons.Default.CarCrash),
-            SosCategory("Kebakaran", Icons.Default.LocalFireDepartment),
-            SosCategory("Darurat Medis", Icons.Default.Add),
-            SosCategory("Tindak Kriminal", Icons.Default.SportsMartialArts),
-            SosCategory("Bencana Alam", Icons.Default.BrokenImage),
-            SosCategory("Orang Hilang", Icons.Default.PersonSearch)
-        )
+    val context = LocalContext.current
+    val activity = context as? FragmentActivity
+    var statusMessage by remember { mutableStateOf("Letakkan jari Anda pada sensor untuk memverifikasi laporan darurat ini.") }
+    var isError by remember { mutableStateOf(false) }
 
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalArrangement = Arrangement.spacedBy(32.dp)
-        ) {
-            items(categories) { category ->
-                SosCategoryItem(category = category, onClick = { onCategoryClick(category.name) })
+    fun triggerBiometric() {
+        if (activity == null) {
+            Toast.makeText(context, "Aktivitas tidak valid", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val biometricManager = BiometricManager.from(context)
+        when (biometricManager.canAuthenticate(
+            BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                    BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        )) {
+            BiometricManager.BIOMETRIC_SUCCESS -> {
+                val executor = ContextCompat.getMainExecutor(context)
+                val biometricPrompt = BiometricPrompt(
+                    activity,
+                    executor,
+                    object : BiometricPrompt.AuthenticationCallback() {
+                        override fun onAuthenticationSucceeded(
+                            result: BiometricPrompt.AuthenticationResult
+                        ) {
+                            super.onAuthenticationSucceeded(result)
+                            Toast.makeText(
+                                context,
+                                "Verifikasi Berhasil!",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            onAuthenticated()
+                        }
+
+                        override fun onAuthenticationFailed() {
+                            super.onAuthenticationFailed()
+                            statusMessage = "Verifikasi gagal, coba lagi."
+                            isError = true
+                        }
+
+                        override fun onAuthenticationError(
+                            errorCode: Int,
+                            errString: CharSequence
+                        ) {
+                            super.onAuthenticationError(errorCode, errString)
+                            if (errorCode != BiometricPrompt.ERROR_USER_CANCELED &&
+                                errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
+                                errorCode != BiometricPrompt.ERROR_CANCELED
+                            ) {
+                                statusMessage = "Error: $errString"
+                                isError = true
+                                Toast.makeText(
+                                    context,
+                                    "Error: $errString",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    }
+                )
+
+                val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                    .setTitle("Verifikasi SOS Darurat")
+                    .setSubtitle("Sentuh sensor sidik jari untuk mengirim laporan")
+                    .setAllowedAuthenticators(
+                        BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                    )
+                    .build()
+
+                biometricPrompt.authenticate(promptInfo)
             }
+
+            BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> {
+                statusMessage = "Perangkat tidak memiliki sensor biometrik"
+                isError = true
+                Toast.makeText(context, statusMessage, Toast.LENGTH_LONG).show()
+            }
+
+            BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> {
+                statusMessage = "Sensor biometrik tidak tersedia"
+                isError = true
+                Toast.makeText(context, statusMessage, Toast.LENGTH_LONG).show()
+            }
+
+            BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> {
+                statusMessage = "Belum ada sidik jari terdaftar di perangkat"
+                isError = true
+                Toast.makeText(
+                    context,
+                    "Silakan daftarkan sidik jari di Settings perangkat",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+
+            else -> {
+                statusMessage = "Biometrik tidak dapat digunakan"
+                isError = true
+                Toast.makeText(context, statusMessage, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    // Trigger biometric prompt otomatis saat sheet muncul
+    LaunchedEffect(Unit) {
+        triggerBiometric()
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = Color.White,
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 56.dp, top = 8.dp, start = 24.dp, end = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Verifikasi Sidik Jari",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Black
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = statusMessage,
+                fontSize = 14.sp,
+                color = if (isError) Color.Red else Color.Gray,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 32.dp)
+            )
+            Spacer(modifier = Modifier.height(40.dp))
+
+            // Tombol untuk retry manual kalau gagal
+            Box(
+                modifier = Modifier
+                    .size(90.dp)
+                    .clip(CircleShape)
+                    .background(if (isError) Color.Red else Color(0xFF0084FF))
+                    .clickable { triggerBiometric() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Fingerprint,
+                    contentDescription = "Pemindai Sidik Jari",
+                    tint = Color.White,
+                    modifier = Modifier.size(48.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Ketuk untuk coba lagi",
+                fontSize = 11.sp,
+                color = Color.Gray
+            )
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -401,44 +533,44 @@ fun FingerprintBottomSheet(
 }
 
 @Composable
-SosStep.TRACKING_MAP -> {
-    fun SosMapScreen(
-        category: String,
-        location: String,
-        latitude: Double,
-        longitude: Double,
-        userProfile: UserProfile,
-        onBackClick: () -> Unit
-    ) {
-        val context = LocalContext.current
-        val currentTime = SimpleDateFormat("HH:mm 'WIB'", Locale("id", "ID")).format(Date())
+fun SosMapScreen(
+    category: String,
+    location: String,
+    latitude: Double,
+    longitude: Double,
+    userProfile: UserProfile,
+    onBackClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val currentTime = SimpleDateFormat("HH:mm 'WIB'", Locale("id", "ID")).format(Date())
 
-        Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()) {
 
-            // Peta OpenStreetMap
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    Configuration.getInstance().load(
-                        ctx, PreferenceManager.getDefaultSharedPreferences(ctx)
-                    )
-                    Configuration.getInstance().userAgentValue = ctx.packageName
+        // Peta OpenStreetMap
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                Configuration.getInstance().load(
+                    ctx, PreferenceManager.getDefaultSharedPreferences(ctx)
+                )
+                Configuration.getInstance().userAgentValue = ctx.packageName
 
-                    MapView(ctx).apply {
-                        setTileSource(TileSourceFactory.MAPNIK)
-                        setMultiTouchControls(true)
-                        controller.setZoom(17.0)
-                        val point = GeoPoint(latitude, longitude)
-                        controller.setCenter(point)
+                MapView(ctx).apply {
+                    setTileSource(TileSourceFactory.MAPNIK)
+                    setMultiTouchControls(true)
+                    controller.setZoom(17.0)
+                    val point = GeoPoint(latitude, longitude)
+                    controller.setCenter(point)
 
-                        val marker = Marker(this)
-                        marker.position = point
-                        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                        marker.title = "Lokasi Darurat Anda"
-                        overlays.add(marker)
-                    }
+                    val marker = Marker(this)
+                    marker.position = point
+                    marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    marker.title = "Lokasi Darurat Anda"
+                    overlays.add(marker)
                 }
-            )
+            }
+        )
+
         // Tombol Kembali
         IconButton(
             onClick = onBackClick,
@@ -488,7 +620,7 @@ SosStep.TRACKING_MAP -> {
                     Spacer(modifier = Modifier.width(16.dp))
 
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("${userProfile.name}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                        Text(userProfile.name, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.LocalPolice, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
@@ -514,7 +646,7 @@ SosStep.TRACKING_MAP -> {
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
-                Divider(color = Color(0xFFEEEEEE), thickness = 1.dp)
+                HorizontalDivider(color = Color(0xFFEEEEEE), thickness = 1.dp)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Info Medis Pengguna

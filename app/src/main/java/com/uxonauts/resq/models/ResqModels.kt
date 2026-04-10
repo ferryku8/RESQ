@@ -9,6 +9,7 @@ data class User(
     val tglLahir: java.util.Date? = null,
     val alamat: String = "",
     val ktpImageUrl: String = "",
+    val profileImageUrl: String = "",  // ← TAMBAH INI
     val pin: String = ""
 )
 

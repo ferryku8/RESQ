@@ -9,10 +9,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.LocalPolice
+import androidx.compose.material.icons.filled.Park
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -28,24 +37,33 @@ import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onSosClick: () -> Unit = {}) { // Tambahkan parameter onSosClick
+fun HomeScreen(
+    onSosClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {}
+) {
     Scaffold(
-        bottomBar = { HomeBottomBar() },
+        bottomBar = {
+            HomeBottomBar(
+                onHomeClick = {},
+                onProfileClick = onProfileClick,
+                selectedTab = "home"
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onSosClick, // Gunakan parameter onSosClick di sini
+                onClick = onSosClick,
                 shape = CircleShape,
-                containerColor = Color(0xFFF44336), // Warna Merah SOS
+                containerColor = Color(0xFFF44336),
                 contentColor = Color.White,
                 modifier = Modifier
                     .size(80.dp)
-                    .offset(y = 40.dp) // Membuat tombol sedikit turun agar menimpa BottomBar
+                    .offset(y = 40.dp)
             ) {
                 Text("SOS", fontSize = 24.sp, fontWeight = FontWeight.Bold)
             }
         },
         floatingActionButtonPosition = FabPosition.Center,
-        containerColor = Color(0xFFFBFBFB) // Sesuai warna background Resq
+        containerColor = Color(0xFFFBFBFB)
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -59,7 +77,7 @@ fun HomeScreen(onSosClick: () -> Unit = {}) { // Tambahkan parameter onSosClick
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Banner (Placeholder untuk gambar Ambulans)
+            // Banner
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -68,7 +86,6 @@ fun HomeScreen(onSosClick: () -> Unit = {}) { // Tambahkan parameter onSosClick
                     .background(Color(0xFFE0E0E0)),
                 contentAlignment = Alignment.Center
             ) {
-                // TODO: Ganti dengan Image asli ambulans jika gambar sudah ditambahkan ke drawable
                 Icon(
                     imageVector = Icons.Default.LocalHospital,
                     contentDescription = "Ambulans",
@@ -83,7 +100,7 @@ fun HomeScreen(onSosClick: () -> Unit = {}) { // Tambahkan parameter onSosClick
             Spacer(modifier = Modifier.height(24.dp))
             ArtikelSection()
 
-            Spacer(modifier = Modifier.height(80.dp)) // Ruang ekstra di bawah untuk FAB
+            Spacer(modifier = Modifier.height(80.dp))
         }
     }
 }
@@ -121,7 +138,9 @@ fun HomeTopBar() {
             imageVector = Icons.Outlined.Article,
             contentDescription = "Dokumen",
             tint = Color(0xFF0084FF),
-            modifier = Modifier.size(32.dp).clickable {  }
+            modifier = Modifier
+                .size(32.dp)
+                .clickable { }
         )
 
         Spacer(modifier = Modifier.width(12.dp))
@@ -130,7 +149,9 @@ fun HomeTopBar() {
             imageVector = Icons.Outlined.Notifications,
             contentDescription = "Notifikasi",
             tint = Color(0xFF0084FF),
-            modifier = Modifier.size(32.dp).clickable {  }
+            modifier = Modifier
+                .size(32.dp)
+                .clickable { }
         )
     }
 }
@@ -147,7 +168,7 @@ fun LaporanSection() {
             "Lihat semua",
             fontSize = 14.sp,
             color = Color(0xFFB3D9FF),
-            modifier = Modifier.clickable {  }
+            modifier = Modifier.clickable { }
         )
     }
 
@@ -157,7 +178,6 @@ fun LaporanSection() {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Ikon-ikon disesuaikan dengan yang paling mirip dengan desain Anda
         LaporanIconCard(Icons.Default.LocalPolice)
         LaporanIconCard(Icons.Default.Traffic)
         LaporanIconCard(Icons.Default.Park)
@@ -173,7 +193,7 @@ fun LaporanIconCard(icon: ImageVector) {
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier
             .size(75.dp)
-            .clickable {  }
+            .clickable { }
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -201,7 +221,7 @@ fun ArtikelSection() {
             "Lihat semua",
             fontSize = 14.sp,
             color = Color(0xFFB3D9FF),
-            modifier = Modifier.clickable {  }
+            modifier = Modifier.clickable { }
         )
     }
 
@@ -227,7 +247,6 @@ fun ArtikelCard(index: Int) {
         Column(
             modifier = Modifier.padding(12.dp)
         ) {
-            // Placeholder Gambar Artikel
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -258,7 +277,12 @@ fun ArtikelCard(index: Int) {
             Spacer(modifier = Modifier.height(8.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(10.dp), tint = Color.Gray)
+                Icon(
+                    Icons.Default.CalendarToday,
+                    contentDescription = null,
+                    modifier = Modifier.size(10.dp),
+                    tint = Color.Gray
+                )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("22 April 2025", fontSize = 10.sp, color = Color.Gray)
             }
@@ -277,7 +301,7 @@ fun ArtikelCard(index: Int) {
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
-                onClick = { /* Navigasi ke detail artikel */ },
+                onClick = { },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(40.dp),
@@ -292,32 +316,49 @@ fun ArtikelCard(index: Int) {
 }
 
 @Composable
-fun HomeBottomBar() {
-    BottomAppBar(
-        containerColor = Color.White,
-        contentColor = Color.Gray,
-        tonalElevation = 16.dp,
-        modifier = Modifier.height(70.dp),
-        contentPadding = PaddingValues(horizontal = 48.dp)
+fun HomeBottomBar(
+    onHomeClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {},
+    selectedTab: String = "home"
+) {
+    Surface(
+        color = Color.White,
+        shadowElevation = 16.dp,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        IconButton(onClick = { /* Ke Home */ }) {
-            Icon(
-                imageVector = Icons.Default.Home,
-                contentDescription = "Home",
-                tint = Color(0xFF0084FF),
-                modifier = Modifier.size(32.dp)
-            )
-        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(70.dp)
+                .padding(horizontal = 48.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onHomeClick) {
+                Icon(
+                    imageVector = if (selectedTab == "home")
+                        Icons.Filled.Home
+                    else
+                        androidx.compose.material.icons.Icons.Outlined.Home,
+                    contentDescription = "Home",
+                    tint = Color(0xFF0084FF),
+                    modifier = Modifier.size(32.dp)
+                )
+            }
 
-        Spacer(modifier = Modifier.weight(1f)) // Jarak melompati area tengah (tempat FAB)
+            Spacer(modifier = Modifier.weight(1f))
 
-        IconButton(onClick = { /* Ke Profil */ }) {
-            Icon(
-                imageVector = Icons.Outlined.Person,
-                contentDescription = "Profile",
-                tint = Color(0xFF0084FF),
-                modifier = Modifier.size(32.dp)
-            )
+            IconButton(onClick = onProfileClick) {
+                Icon(
+                    imageVector = if (selectedTab == "profile")
+                        Icons.Filled.Person
+                    else
+                        androidx.compose.material.icons.Icons.Outlined.Person,
+                    contentDescription = "Profile",
+                    tint = Color(0xFF0084FF),
+                    modifier = Modifier.size(32.dp)
+                )
+            }
         }
     }
 }

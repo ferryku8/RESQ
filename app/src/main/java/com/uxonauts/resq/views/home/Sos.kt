@@ -24,6 +24,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.Manifest
+import android.content.pm.PackageManager
+import android.location.Geocoder
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.platform.LocalContext
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.location.CancellationTokenSource
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -52,6 +60,11 @@ fun SosSystemFlow(
     firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
     userId: String // ID pengguna yang sedang login
 ) {
+    val context = LocalContext.current
+    var userLat by remember { mutableStateOf(0.0) }
+    var userLng by remember { mutableStateOf(0.0) }
+    val fusedClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+
     var currentStep by remember { mutableStateOf(SosStep.CATEGORIES) }
     var selectedCategory by remember { mutableStateOf("") }
     var showFingerprintDialog by remember { mutableStateOf(false) }
@@ -143,25 +156,72 @@ fun SosSystemFlow(
                 onDismiss = { showFingerprintDialog = false },
                 onAuthenticated = {
                     showFingerprintDialog = false
-                    isFetchingLocation = true // Memulai proses ambil lokasi
+                    isFetchingLocation = true
 
-                    // Simulasi pengambilan GPS / Lokasi selama 2 detik
-                    // Di aplikasi asli, gunakan FusedLocationProviderClient di sini
-                    coroutineScope.launch {
-                        delay(2000)
-                        currentLocation = "Jl. Sudirman No. 45, Binjai, Sumatera Utara"
+                    val hasPerm = ContextCompat.checkSelfPermission(
+                        context, Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+
+                    if (!hasPerm) {
                         isFetchingLocation = false
-                        currentStep = SosStep.TRACKING_MAP
+                        android.widget.Toast.makeText(context,
+                            "Izin lokasi diperlukan untuk SOS",
+                            android.widget.Toast.LENGTH_LONG).show()
+                        return@FingerprintBottomSheet
+                    }
 
-                        // Di sini Anda juga bisa mengirim data SOS ke Firestore
-                        val sosData = hashMapOf(
-                            "userId" to userId,
-                            "category" to selectedCategory,
-                            "location" to currentLocation,
-                            "timestamp" to com.google.firebase.Timestamp.now(),
-                            "status" to "active"
-                        )
-                        firestore.collection("sos_alerts").add(sosData)
+                    try {
+                        val cts = CancellationTokenSource()
+                        fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
+                            .addOnSuccessListener { location ->
+                                if (location != null) {
+                                    userLat = location.latitude
+                                    userLng = location.longitude
+
+                                    // Reverse geocode jadi alamat
+                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        val addressText = try {
+                                            val geocoder = Geocoder(context, Locale("id", "ID"))
+                                            @Suppress("DEPRECATION")
+                                            val list = geocoder.getFromLocation(userLat, userLng, 1)
+                                            list?.firstOrNull()?.getAddressLine(0)
+                                                ?: "Lat: $userLat, Lng: $userLng"
+                                        } catch (e: Exception) {
+                                            "Lat: $userLat, Lng: $userLng"
+                                        }
+
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            currentLocation = addressText
+                                            isFetchingLocation = false
+                                            currentStep = SosStep.TRACKING_MAP
+
+                                            val sosData = hashMapOf(
+                                                "userId" to userId,
+                                                "category" to selectedCategory,
+                                                "location" to currentLocation,
+                                                "latitude" to userLat,
+                                                "longitude" to userLng,
+                                                "timestamp" to com.google.firebase.Timestamp.now(),
+                                                "status" to "active"
+                                            )
+                                            firestore.collection("sos_alerts").add(sosData)
+                                        }
+                                    }
+                                } else {
+                                    isFetchingLocation = false
+                                    android.widget.Toast.makeText(context,
+                                        "Lokasi tidak ditemukan. Aktifkan GPS.",
+                                        android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }
+                            .addOnFailureListener {
+                                isFetchingLocation = false
+                                android.widget.Toast.makeText(context,
+                                    "Gagal mengambil lokasi: ${it.message}",
+                                    android.widget.Toast.LENGTH_LONG).show()
+                            }
+                    } catch (e: SecurityException) {
+                        isFetchingLocation = false
                     }
                 }
             )
@@ -341,50 +401,44 @@ fun FingerprintBottomSheet(
 }
 
 @Composable
-fun SosMapScreen(
-    category: String,
-    location: String,
-    userProfile: UserProfile,
-    onBackClick: () -> Unit
-) {
-    val currentTime = SimpleDateFormat("HH:mm 'WIB'", Locale("id", "ID")).format(Date())
+SosStep.TRACKING_MAP -> {
+    fun SosMapScreen(
+        category: String,
+        location: String,
+        latitude: Double,
+        longitude: Double,
+        userProfile: UserProfile,
+        onBackClick: () -> Unit
+    ) {
+        val context = LocalContext.current
+        val currentTime = SimpleDateFormat("HH:mm 'WIB'", Locale("id", "ID")).format(Date())
 
-    Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize()) {
 
-        // 1. Placeholder Latar Belakang Peta (Grid & Jalur)
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFFE8EAED))
-        ) {
-            val gridSpace = 120f
-            for (i in 0..size.width.toInt() step gridSpace.toInt()) {
-                drawLine(Color.White, Offset(i.toFloat(), 0f), Offset(i.toFloat(), size.height), strokeWidth = 8f)
-            }
-            for (i in 0..size.height.toInt() step gridSpace.toInt()) {
-                drawLine(Color.White, Offset(0f, i.toFloat()), Offset(size.width, i.toFloat()), strokeWidth = 8f)
-            }
+            // Peta OpenStreetMap
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    Configuration.getInstance().load(
+                        ctx, PreferenceManager.getDefaultSharedPreferences(ctx)
+                    )
+                    Configuration.getInstance().userAgentValue = ctx.packageName
 
-            val pathEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 15f), 0f)
-            val startPoint = Offset(size.width * 0.4f, size.height * 0.2f)
-            val middlePoint = Offset(size.width * 0.4f, size.height * 0.4f)
-            val endPoint = Offset(size.width * 0.7f, size.height * 0.6f)
+                    MapView(ctx).apply {
+                        setTileSource(TileSourceFactory.MAPNIK)
+                        setMultiTouchControls(true)
+                        controller.setZoom(17.0)
+                        val point = GeoPoint(latitude, longitude)
+                        controller.setCenter(point)
 
-            drawLine(Color(0xFF0084FF), startPoint, middlePoint, strokeWidth = 10f, pathEffect = pathEffect)
-            drawLine(Color(0xFF0084FF), middlePoint, Offset(size.width * 0.7f, size.height * 0.4f), strokeWidth = 10f, pathEffect = pathEffect)
-            drawLine(Color(0xFF0084FF), Offset(size.width * 0.7f, size.height * 0.4f), endPoint, strokeWidth = 10f, pathEffect = pathEffect)
-
-            // Marker Tujuan (Lokasi Pengguna - Merah)
-            drawCircle(Color(0xFFF44336).copy(alpha = 0.2f), radius = 120f, center = startPoint)
-            drawCircle(Color(0xFFF44336), radius = 24f, center = startPoint)
-            drawCircle(Color.White, radius = 8f, center = startPoint)
-
-            // Marker Bantuan (Lokasi Polisi/Ambulan - Biru)
-            drawCircle(Color(0xFF0084FF).copy(alpha = 0.2f), radius = 160f, center = endPoint)
-            drawCircle(Color(0xFF0084FF), radius = 24f, center = endPoint)
-            drawCircle(Color.White, radius = 8f, center = endPoint)
-        }
-
+                        val marker = Marker(this)
+                        marker.position = point
+                        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                        marker.title = "Lokasi Darurat Anda"
+                        overlays.add(marker)
+                    }
+                }
+            )
         // Tombol Kembali
         IconButton(
             onClick = onBackClick,

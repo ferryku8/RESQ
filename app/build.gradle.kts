@@ -69,6 +69,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("io.coil-kt:coil-compose:2.5.0")
     implementation("com.google.android.gms:play-services-location:21.1.0")
+    implementation("org.osmdroid:osmdroid-android:6.1.18")
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
 
     implementation(platform("com.google.firebase:firebase-bom:34.9.0"))

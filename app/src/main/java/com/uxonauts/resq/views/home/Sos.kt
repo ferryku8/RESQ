@@ -73,19 +73,37 @@ fun SosSystemFlow(
             // Ambil data User Profile
             firestore.collection("users").document(userId).get()
                 .addOnSuccessListener { document ->
-                    if (document != null) {
-                        userName = document.getString("fullName") ?: "Nama Tidak Ditemukan"
+                    if (document != null && document.exists()) {
+                        userName = document.getString("namaLengkap")
+                            ?: document.getString("fullName")
+                                    ?: "Nama Tidak Ditemukan"
+                    } else {
+                        userName = "Nama Tidak Ditemukan"
                     }
+                }
+                .addOnFailureListener {
+                    userName = "Nama Tidak Ditemukan"
                 }
 
             // Ambil data Medical Info
             firestore.collection("medical_info").document(userId).get()
                 .addOnSuccessListener { document ->
-                    if (document != null) {
-                        bloodType = document.getString("bloodType") ?: "-"
-                        allergies = document.getString("allergies") ?: "-"
-                        medicalHistory = document.getString("medicalConditions") ?: "-"
+                    if (document != null && document.exists()) {
+                        bloodType = document.getString("golDarah")
+                            ?: document.getString("bloodType")
+                                    ?: "-"
+                        allergies = document.getString("alergi")
+                            ?: document.getString("allergies")
+                                    ?: "-"
+                        medicalHistory = document.getString("riwayatPenyakit")
+                            ?: document.getString("medicalConditions")
+                                    ?: "-"
                     }
+                }
+                .addOnFailureListener {
+                    bloodType = "-"
+                    allergies = "-"
+                    medicalHistory = "-"
                 }
         }
     }

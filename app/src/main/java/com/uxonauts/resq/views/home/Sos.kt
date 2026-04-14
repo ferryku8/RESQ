@@ -36,6 +36,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.firebase.firestore.FirebaseFirestore
+import com.uxonauts.resq.utils.CategoryRoleMapper
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -45,6 +46,8 @@ import org.osmdroid.views.overlay.Marker
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.foundation.clickable
 
 enum class SosStep {
     CATEGORIES,
@@ -74,16 +77,26 @@ fun SosSystemFlow(
     var currentStep by remember { mutableStateOf(SosStep.CATEGORIES) }
     var selectedCategory by remember { mutableStateOf("") }
     var showFingerprintDialog by remember { mutableStateOf(false) }
+    var currentAlertId by remember { mutableStateOf("") }
 
     var isFetchingLocation by remember { mutableStateOf(false) }
     var currentLocation by remember { mutableStateOf("") }
     val coroutineScope = rememberCoroutineScope()
 
     var userName by remember { mutableStateOf("Memuat...") }
+    var userPhone by remember { mutableStateOf("") }
     var bloodType by remember { mutableStateOf("-") }
     var allergies by remember { mutableStateOf("-") }
     var medicalHistory by remember { mutableStateOf("-") }
 
+    // State untuk data realtime petugas
+    var petugasName by remember { mutableStateOf("") }
+    var petugasRole by remember { mutableStateOf(0) }
+    var petugasLat by remember { mutableStateOf(0.0) }
+    var petugasLng by remember { mutableStateOf(0.0) }
+    var alertStatus by remember { mutableStateOf("active") }
+
+    // Fetch profile user saat pertama masuk
     LaunchedEffect(userId) {
         if (userId.isNotEmpty()) {
             firestore.collection("users").document(userId).get()
@@ -91,8 +104,7 @@ fun SosSystemFlow(
                     if (document != null && document.exists()) {
                         userName = document.getString("namaLengkap")
                             ?: document.getString("fullName") ?: "Nama Tidak Ditemukan"
-                    } else {
-                        userName = "Nama Tidak Ditemukan"
+                        userPhone = document.getString("noTelepon") ?: ""
                     }
                 }
                 .addOnFailureListener { userName = "Nama Tidak Ditemukan" }
@@ -112,6 +124,22 @@ fun SosSystemFlow(
                     bloodType = "-"
                     allergies = "-"
                     medicalHistory = "-"
+                }
+        }
+    }
+
+    // Listen update dokumen sos_alerts yang aktif
+    LaunchedEffect(currentAlertId) {
+        if (currentAlertId.isNotEmpty()) {
+            firestore.collection("sos_alerts").document(currentAlertId)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null || snapshot == null || !snapshot.exists()) return@addSnapshotListener
+
+                    alertStatus = snapshot.getString("status") ?: "active"
+                    petugasName = snapshot.getString("acceptedByName") ?: ""
+                    petugasRole = (snapshot.getLong("acceptedByRole") ?: 0L).toInt()
+                    petugasLat = snapshot.getDouble("petugasLat") ?: 0.0
+                    petugasLng = snapshot.getDouble("petugasLng") ?: 0.0
                 }
         }
     }
@@ -141,7 +169,15 @@ fun SosSystemFlow(
                     latitude = userLat,
                     longitude = userLng,
                     userProfile = currentUserData,
-                    onBackClick = { currentStep = SosStep.CATEGORIES }
+                    petugasLat = petugasLat,
+                    petugasLng = petugasLng,
+                    petugasName = petugasName.ifEmpty { "Menunggu petugas..." },
+                    petugasRole = petugasRole,
+                    alertStatus = alertStatus,
+                    onBackClick = {
+                        currentStep = SosStep.CATEGORIES
+                        currentAlertId = ""
+                    }
                 )
             }
         }
@@ -159,8 +195,7 @@ fun SosSystemFlow(
 
                     if (!hasPerm) {
                         isFetchingLocation = false
-                        Toast.makeText(context,
-                            "Izin lokasi diperlukan untuk SOS",
+                        Toast.makeText(context, "Izin lokasi diperlukan untuk SOS",
                             Toast.LENGTH_LONG).show()
                         return@FingerprintBottomSheet
                     }
@@ -187,18 +222,43 @@ fun SosSystemFlow(
                                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                                             currentLocation = addressText
                                             isFetchingLocation = false
-                                            currentStep = SosStep.TRACKING_MAP
 
+                                            // Buat alert dengan struktur lengkap
+                                            val targetRoles = CategoryRoleMapper.getTargetRoles(selectedCategory)
                                             val sosData = hashMapOf(
                                                 "userId" to userId,
+                                                "userName" to userName,
+                                                "userPhone" to userPhone,
                                                 "category" to selectedCategory,
-                                                "location" to currentLocation,
                                                 "latitude" to userLat,
                                                 "longitude" to userLng,
-                                                "timestamp" to com.google.firebase.Timestamp.now(),
-                                                "status" to "active"
+                                                "address" to currentLocation,
+                                                "status" to "active",
+                                                "targetRoles" to targetRoles,
+                                                "acceptedBy" to "",
+                                                "acceptedByName" to "",
+                                                "acceptedByRole" to 0,
+                                                "petugasLat" to 0.0,
+                                                "petugasLng" to 0.0,
+                                                "medicalInfo" to mapOf(
+                                                    "bloodType" to bloodType,
+                                                    "allergies" to allergies,
+                                                    "medicalHistory" to medicalHistory
+                                                ),
+                                                "timestamp" to com.google.firebase.Timestamp.now()
                                             )
-                                            firestore.collection("sos_alerts").add(sosData)
+
+                                            firestore.collection("sos_alerts")
+                                                .add(sosData)
+                                                .addOnSuccessListener { docRef ->
+                                                    currentAlertId = docRef.id
+                                                    currentStep = SosStep.TRACKING_MAP
+                                                }
+                                                .addOnFailureListener { e ->
+                                                    Toast.makeText(context,
+                                                        "Gagal kirim SOS: ${e.message}",
+                                                        Toast.LENGTH_LONG).show()
+                                                }
                                         }
                                     }
                                 } else {
@@ -405,34 +465,23 @@ fun FingerprintBottomSheet(
             BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> {
                 statusMessage = "Perangkat tidak memiliki sensor biometrik"
                 isError = true
-                Toast.makeText(context, statusMessage, Toast.LENGTH_LONG).show()
             }
-
             BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> {
                 statusMessage = "Sensor biometrik tidak tersedia"
                 isError = true
-                Toast.makeText(context, statusMessage, Toast.LENGTH_LONG).show()
             }
-
             BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> {
                 statusMessage = "Belum ada sidik jari terdaftar di perangkat"
                 isError = true
-                Toast.makeText(context,
-                    "Silakan daftarkan sidik jari di Settings perangkat",
-                    Toast.LENGTH_LONG).show()
             }
-
             else -> {
                 statusMessage = "Biometrik tidak dapat digunakan"
                 isError = true
-                Toast.makeText(context, statusMessage, Toast.LENGTH_LONG).show()
             }
         }
     }
 
-    LaunchedEffect(Unit) {
-        triggerBiometric()
-    }
+    LaunchedEffect(Unit) { triggerBiometric() }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -446,12 +495,8 @@ fun FingerprintBottomSheet(
                 .padding(bottom = 56.dp, top = 8.dp, start = 24.dp, end = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "Verifikasi Sidik Jari",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Black
-            )
+            Text("Verifikasi Sidik Jari", fontSize = 22.sp,
+                fontWeight = FontWeight.Bold, color = Color.Black)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = statusMessage,
@@ -491,9 +536,41 @@ fun SosMapScreen(
     latitude: Double,
     longitude: Double,
     userProfile: UserProfile,
+    petugasLat: Double = 0.0,
+    petugasLng: Double = 0.0,
+    petugasName: String = "Menunggu petugas...",
+    petugasRole: Int = 0,
+    alertStatus: String = "active",
     onBackClick: () -> Unit
 ) {
     val currentTime = SimpleDateFormat("HH:mm 'WIB'", Locale("id", "ID")).format(Date())
+    val roleText = when (petugasRole) {
+        2 -> "Polisi"
+        3 -> "Medis/Ambulans"
+        4 -> "Damkar"
+        else -> "Petugas"
+    }
+    val statusText = when (alertStatus) {
+        "active" -> "Menunggu petugas..."
+        "accepted" -> "Petugas sedang menuju lokasi"
+        "on_the_way" -> "Petugas dalam perjalanan"
+        "arrived" -> "Petugas telah tiba"
+        "completed" -> "Selesai ditangani"
+        else -> "Aktif"
+    }
+
+    var route by remember { mutableStateOf<com.uxonauts.resq.utils.RouteResult?>(null) }
+    var hasCenteredMap by remember { mutableStateOf(false) }
+
+    // Hitung rute setiap kali petugas berpindah lokasi
+    LaunchedEffect(petugasLat, petugasLng) {
+        if (petugasLat != 0.0 && petugasLng != 0.0 && latitude != 0.0) {
+            val r = com.uxonauts.resq.utils.RoutingHelper.getRoute(
+                petugasLat, petugasLng, latitude, longitude
+            )
+            if (r != null) route = r
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
@@ -507,18 +584,71 @@ fun SosMapScreen(
                 MapView(ctx).apply {
                     setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
-                    controller.setZoom(17.0)
-                    val point = GeoPoint(latitude, longitude)
-                    controller.setCenter(point)
-
-                    val marker = Marker(this)
-                    marker.position = point
-                    marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                    marker.title = "Lokasi Darurat Anda"
-                    overlays.add(marker)
+                    controller.setZoom(16.0)
+                    controller.setCenter(GeoPoint(latitude, longitude))
                 }
+            },
+            update = { mv ->
+                mv.overlays.clear()
+
+                // Marker user (anda) - pin merah
+                val userMarker = Marker(mv)
+                userMarker.position = GeoPoint(latitude, longitude)
+                userMarker.title = "Lokasi Anda"
+                userMarker.icon = com.uxonauts.resq.utils.MapHelpers.createPinMarker(
+                    mv.context, android.graphics.Color.parseColor("#F44336")
+                )
+                userMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                mv.overlays.add(userMarker)
+
+                // Marker petugas - dot biru
+                if (petugasLat != 0.0 && petugasLng != 0.0) {
+                    val petugasMarker = Marker(mv)
+                    petugasMarker.position = GeoPoint(petugasLat, petugasLng)
+                    petugasMarker.title = "Petugas: $petugasName"
+                    petugasMarker.icon = com.uxonauts.resq.utils.MapHelpers.createDotMarker(
+                        mv.context, android.graphics.Color.parseColor("#0084FF")
+                    )
+                    petugasMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    mv.overlays.add(petugasMarker)
+                }
+
+                // Polyline dengan shadow effect
+                route?.let { r ->
+                    if (r.points.isNotEmpty()) {
+                        // Shadow line (lapisan bawah)
+                        val shadowLine = org.osmdroid.views.overlay.Polyline()
+                        shadowLine.setPoints(r.points)
+                        shadowLine.outlinePaint.color =
+                            android.graphics.Color.parseColor("#33000000")
+                        shadowLine.outlinePaint.strokeWidth = 22f
+                        shadowLine.outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+                        shadowLine.outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
+                        mv.overlays.add(shadowLine)
+
+                        // Main line
+                        val mainLine = org.osmdroid.views.overlay.Polyline()
+                        mainLine.setPoints(r.points)
+                        mainLine.outlinePaint.color =
+                            android.graphics.Color.parseColor("#0084FF")
+                        mainLine.outlinePaint.strokeWidth = 14f
+                        mainLine.outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+                        mainLine.outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
+                        mv.overlays.add(mainLine)
+                    }
+                }
+
+                // Center map sekali
+                if (!hasCenteredMap && petugasLat != 0.0) {
+                    val centerLat = (latitude + petugasLat) / 2
+                    val centerLng = (longitude + petugasLng) / 2
+                    mv.controller.setCenter(GeoPoint(centerLat, centerLng))
+                    mv.controller.setZoom(14.5)
+                    hasCenteredMap = true
+                }
+
+                mv.invalidate()
             }
-        )
 
         IconButton(
             onClick = onBackClick,
@@ -544,7 +674,7 @@ fun SosMapScreen(
                 Icon(Icons.Default.LocationOn, contentDescription = null,
                     tint = Color.Red, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Lokasi Anda Ditemukan", fontSize = 12.sp,
+                Text(statusText, fontSize = 12.sp,
                     fontWeight = FontWeight.Bold, color = Color.Black)
             }
         }
@@ -566,27 +696,55 @@ fun SosMapScreen(
                     Spacer(modifier = Modifier.width(16.dp))
 
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(userProfile.name, fontSize = 22.sp,
+                        Text(petugasName, fontSize = 18.sp,
                             fontWeight = FontWeight.Bold, color = Color.Black)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.LocalPolice, contentDescription = null,
                                 tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Petugas Medis/Polisi - 5 min",
-                                fontSize = 12.sp, color = Color.DarkGray)
+                            Text(roleText, fontSize = 12.sp, color = Color.DarkGray)
                         }
                     }
 
-                    Icon(Icons.Default.Call, contentDescription = "Telepon",
-                        tint = Color(0xFF0084FF),
-                        modifier = Modifier.size(28.dp).clickable { })
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Icon(Icons.Default.ChatBubble, contentDescription = "Chat",
-                        tint = Color(0xFF0084FF),
-                        modifier = Modifier.size(28.dp).clickable { })
+                    if (alertStatus != "active") {
+                        Icon(Icons.Default.Call, contentDescription = "Telepon",
+                            tint = Color(0xFF0084FF),
+                            modifier = Modifier.size(28.dp).clickable { })
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Distance & ETA card
+                if (route != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFF0F8FF), RoundedCornerShape(12.dp))
+                            .padding(16.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Jarak Petugas", fontSize = 11.sp, color = Color.Gray)
+                            Text(
+                                com.uxonauts.resq.utils.RoutingHelper.formatDistance(
+                                    route!!.distanceMeters
+                                ),
+                                fontSize = 20.sp, fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Estimasi Tiba", fontSize = 11.sp, color = Color.Gray)
+                            Text(
+                                com.uxonauts.resq.utils.RoutingHelper.formatDuration(
+                                    route!!.durationSeconds
+                                ),
+                                fontSize = 20.sp, fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0084FF)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
 
                 Text("$category - $currentTime", fontSize = 18.sp,
                     fontWeight = FontWeight.Bold, color = Color(0xFFF44336))
@@ -596,16 +754,16 @@ fun SosMapScreen(
                     Icon(Icons.Default.LocationOn, contentDescription = null,
                         tint = Color.Gray, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(location, fontSize = 15.sp, color = Color.DarkGray, lineHeight = 20.sp)
+                    Text(location, fontSize = 14.sp, color = Color.DarkGray, lineHeight = 18.sp)
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
-                HorizontalDivider(color = Color(0xFFEEEEEE), thickness = 1.dp)
                 Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = Color(0xFFEEEEEE), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
 
-                Text("Info Darurat Korban: ${userProfile.name}",
-                    fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.Black)
-                Spacer(modifier = Modifier.height(8.dp))
+                Text("Info Korban: ${userProfile.name}",
+                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.Black)
+                Spacer(modifier = Modifier.height(4.dp))
 
                 MedicalInfoRow("Golongan Darah", userProfile.bloodType)
                 MedicalInfoRow("Alergi", userProfile.allergies)

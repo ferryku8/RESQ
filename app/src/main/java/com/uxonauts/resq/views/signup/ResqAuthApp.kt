@@ -18,6 +18,12 @@ fun ResqAuthApp() {
     val navController = rememberNavController()
     val authController: AuthController = viewModel()
 
+    val startDest = if (FirebaseAuth.getInstance().currentUser != null) {
+        "home"
+    } else {
+        "onboarding"
+    }
+
     NavHost(navController = navController, startDestination = "onboarding") {
         composable("onboarding") { OnboardingScreen(navController) }
         composable("login") { LoginScreen(navController, authController) }
@@ -29,7 +35,8 @@ fun ResqAuthApp() {
         composable("home") {
             HomeScreen(
                 onSosClick = { navController.navigate("sos_flow") },
-                onProfileClick = { navController.navigate("profile") }
+                onProfileClick = { navController.navigate("profile") },
+                onLaporanClick = { navController.navigate("laporan_kategori") }
             )
         }
 
@@ -52,6 +59,37 @@ fun ResqAuthApp() {
         composable("edit_profile") {
             com.uxonauts.resq.views.profile.EditProfileScreen(
                 navController = navController
+            )
+        }
+
+        composable("laporan_kategori") {
+            com.uxonauts.resq.views.laporan.LaporanKategoriScreen(
+                navController = navController,
+                onKategoriSelected = { jenis, sub ->
+                    val encJenis = java.net.URLEncoder.encode(jenis, "UTF-8")
+                    val encSub = java.net.URLEncoder.encode(sub, "UTF-8")
+                    navController.navigate("laporan_form/$encJenis/$encSub")
+                }
+            )
+        }
+
+        composable(
+            "laporan_form/{jenis}/{sub}",
+            arguments = listOf(
+                androidx.navigation.navArgument("jenis") { type = androidx.navigation.NavType.StringType },
+                androidx.navigation.navArgument("sub") { type = androidx.navigation.NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val jenis = java.net.URLDecoder.decode(
+                backStackEntry.arguments?.getString("jenis") ?: "", "UTF-8"
+            )
+            val sub = java.net.URLDecoder.decode(
+                backStackEntry.arguments?.getString("sub") ?: "", "UTF-8"
+            )
+            com.uxonauts.resq.views.laporan.LaporanFormScreen(
+                navController = navController,
+                jenisLaporan = jenis,
+                subJenis = sub
             )
         }
     }

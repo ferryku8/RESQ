@@ -1,5 +1,7 @@
 package com.uxonauts.resq.views.login
 
+import android.content.Intent
+import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -8,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -16,14 +19,17 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.uxonauts.resq.R
 import com.uxonauts.resq.controllers.AuthController
+import com.uxonauts.resq.services.EmergencyListenerService
 import com.uxonauts.resq.views.ui.theme.ResqBlue
 
 @Composable
 fun LoginScreen(navController: NavController, controller: AuthController) {
+    val context = LocalContext.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background) // Menggunakan #FBFBFB
+            .background(MaterialTheme.colorScheme.background)
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -61,8 +67,20 @@ fun LoginScreen(navController: NavController, controller: AuthController) {
         Spacer(modifier = Modifier.height(32.dp))
 
         Button(
-            onClick = { controller.doLogin(navController) },
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            onClick = {
+                controller.doLogin(navController) {
+                    // Start EmergencyListenerService setelah login sukses
+                    val intent = Intent(context, EmergencyListenerService::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        context.startForegroundService(intent)
+                    } else {
+                        context.startService(intent)
+                    }
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = ResqBlue),
             shape = RoundedCornerShape(12.dp)
         ) {

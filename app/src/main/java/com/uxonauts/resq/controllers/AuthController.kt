@@ -24,7 +24,6 @@ import java.util.UUID
 class AuthController : ViewModel() {
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
-    // Menggunakan lazy init untuk storage agar instance diambil saat dibutuhkan saja
     private val storage by lazy { FirebaseStorage.getInstance() }
 
     var isLoading by mutableStateOf(false)
@@ -128,7 +127,6 @@ class AuthController : ViewModel() {
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
                     val text = visionText.text.uppercase()
-                    // Logika deteksi sederhana, bisa ditingkatkan
                     val isValidKtp = text.contains("NIK") || text.contains("PROVINSI") ||
                             text.contains("KABUPATEN") || text.contains("KOTA") ||
                             text.contains("KARTU TANDA PENDUDUK")
@@ -136,15 +134,12 @@ class AuthController : ViewModel() {
                     if (isValidKtp) {
                         ktpImageUri = uri
                     } else {
-                        // Untuk debugging/development, kita perbolehkan lolos jika gagal deteksi OCR
-                        // agar tidak menghambat testing. Ubah ke 'isValidKtp' untuk production.
                         ktpImageUri = uri
                         // errorMessage = "Foto tidak terdeteksi sebagai KTP yang valid."
                     }
                     isKtpValidating = false
                 }
                 .addOnFailureListener {
-                    // Fallback jika ML Kit gagal
                     ktpImageUri = uri
                     isKtpValidating = false
                 }
@@ -171,12 +166,13 @@ class AuthController : ViewModel() {
         }
     }
 
-    fun doLogin(navController: NavController) {
+    fun doLogin(navController: NavController, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
             try {
                 auth.signInWithEmailAndPassword(loginEmail, loginPassword).await()
+                onSuccess()
                 navController.navigate("home") { popUpTo(0) }
             } catch (e: Exception) {
                 errorMessage = "Login Gagal: ${e.localizedMessage}"
@@ -195,7 +191,7 @@ class AuthController : ViewModel() {
                 val authResult = auth.createUserWithEmailAndPassword(email, password).await()
                 val uid = authResult.user?.uid ?: throw Exception("Gagal mendapatkan ID")
 
-                // 2. Upload KTP ke Firebase Storage (Ditingkatkan)
+                // 2. Upload KTP ke Firebase Storage
                 var downloadUrl = ""
                 if (ktpImageUri != null) {
                     try {
@@ -204,8 +200,6 @@ class AuthController : ViewModel() {
                         downloadUrl = storageRef.downloadUrl.await().toString()
                     } catch (e: StorageException) {
                         Log.e("UploadKTP", "Error Storage: ${e.errorCode} - ${e.message}")
-                        // Jika error 404 (Bucket not found), kita skip upload gambar
-                        // User tetap bisa lanjut tanpa foto KTP di database
                     } catch (e: Exception) {
                         Log.e("UploadKTP", "Gagal upload KTP umum: ${e.message}")
                     }
@@ -240,7 +234,6 @@ class AuthController : ViewModel() {
 
                 // 5. Simpan Kontak Darurat
                 val allContactsToSave = savedContacts.toMutableList()
-                // Jika input form kontak terakhir terisi tapi belum di-add, otomatis tambahkan
                 if (isStep4ContactValid() && !isSelfNumber()) {
                     allContactsToSave.add(
                         EmergencyContact(
@@ -257,7 +250,6 @@ class AuthController : ViewModel() {
                     db.collection("emergency_contacts").document(contact.contactId).set(contact.copy(userId = uid)).await()
                 }
 
-                // Navigasi ke Setup PIN
                 navController.navigate("pin_setup") { popUpTo("signup") { inclusive = true } }
             } catch (e: Exception) {
                 errorMessage = "Gagal Pendaftaran: ${e.localizedMessage}"

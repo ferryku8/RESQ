@@ -1,46 +1,67 @@
 package com.uxonauts.resq.views.home
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LocalPolice
 import androidx.compose.material.icons.filled.Park
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.rememberAsyncImagePainter
+import com.uxonauts.resq.controllers.Article
+import com.uxonauts.resq.controllers.ArticleController
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onSosClick: () -> Unit = {},
-    onProfileClick: () -> Unit = {}
+    onProfileClick: () -> Unit = {},
+    onLaporanClick: () -> Unit = {}
 ) {
+    val articleController: ArticleController = viewModel()
+
+    LaunchedEffect(Unit) {
+        articleController.fetchAll()
+    }
+
     Scaffold(
         bottomBar = {
             HomeBottomBar(
@@ -77,28 +98,13 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Banner
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFFE0E0E0)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.LocalHospital,
-                    contentDescription = "Ambulans",
-                    tint = Color.Gray,
-                    modifier = Modifier.size(64.dp)
-                )
-            }
+            BannerSection(banners = articleController.banners)
 
             Spacer(modifier = Modifier.height(24.dp))
-            LaporanSection()
+            LaporanSection(onLaporanClick = onLaporanClick)
 
             Spacer(modifier = Modifier.height(24.dp))
-            ArtikelSection()
+            ArtikelSection(articles = articleController.articles)
 
             Spacer(modifier = Modifier.height(80.dp))
         }
@@ -156,8 +162,134 @@ fun HomeTopBar() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun LaporanSection() {
+fun BannerSection(banners: List<Article>) {
+    if (banners.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFFE0E0E0)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.LocalHospital,
+                contentDescription = "Banner",
+                tint = Color.Gray,
+                modifier = Modifier.size(64.dp)
+            )
+        }
+        return
+    }
+
+    val pagerState = rememberPagerState(pageCount = { banners.size })
+
+    Column {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+        ) { page ->
+            val banner = banners[page]
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFFE0E0E0))
+            ) {
+                if (banner.gambarUrl.isNotEmpty()) {
+                    Image(
+                        painter = rememberAsyncImagePainter(banner.gambarUrl),
+                        contentDescription = banner.judul,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Image,
+                            contentDescription = null,
+                            tint = Color.Gray,
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.65f)
+                                ),
+                                startY = 200f
+                            )
+                        )
+                )
+
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        banner.judul,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (banner.konten.isNotEmpty()) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            banner.konten,
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        if (banners.size > 1) {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(banners.size) { i ->
+                    val selected = i == pagerState.currentPage
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 3.dp)
+                            .size(if (selected) 8.dp else 6.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (selected) Color(0xFF0084FF)
+                                else Color(0xFFB3D9FF)
+                            )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LaporanSection(onLaporanClick: () -> Unit = {}) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -168,7 +300,7 @@ fun LaporanSection() {
             "Lihat semua",
             fontSize = 14.sp,
             color = Color(0xFFB3D9FF),
-            modifier = Modifier.clickable { }
+            modifier = Modifier.clickable { onLaporanClick() }
         )
     }
 
@@ -178,22 +310,22 @@ fun LaporanSection() {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        LaporanIconCard(Icons.Default.LocalPolice)
-        LaporanIconCard(Icons.Default.Traffic)
-        LaporanIconCard(Icons.Default.Park)
-        LaporanIconCard(Icons.Default.SmartToy)
+        LaporanIconCard(Icons.Default.LocalPolice, onLaporanClick)
+        LaporanIconCard(Icons.Default.Traffic, onLaporanClick)
+        LaporanIconCard(Icons.Default.Park, onLaporanClick)
+        LaporanIconCard(Icons.Default.SmartToy, onLaporanClick)
     }
 }
 
 @Composable
-fun LaporanIconCard(icon: ImageVector) {
+fun LaporanIconCard(icon: ImageVector, onClick: () -> Unit = {}) {
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier
             .size(75.dp)
-            .clickable { }
+            .clickable { onClick() }
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -210,7 +342,7 @@ fun LaporanIconCard(icon: ImageVector) {
 }
 
 @Composable
-fun ArtikelSection() {
+fun ArtikelSection(articles: List<Article>) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -227,17 +359,36 @@ fun ArtikelSection() {
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        items(3) { index ->
-            ArtikelCard(index)
+    if (articles.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(100.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "Belum ada artikel",
+                color = Color.Gray,
+                fontSize = 13.sp
+            )
+        }
+    } else {
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            items(articles) { article ->
+                ArtikelCard(article)
+            }
         }
     }
 }
 
 @Composable
-fun ArtikelCard(index: Int) {
+fun ArtikelCard(article: Article) {
+    val dateText = article.tglPublish?.toDate()?.let {
+        SimpleDateFormat("d MMMM yyyy", Locale("id", "ID")).format(it)
+    } ?: "-"
+
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -255,18 +406,22 @@ fun ArtikelCard(index: Int) {
                     .background(Color(0xFFE0E0E0)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Image, contentDescription = null, tint = Color.Gray)
+                if (article.gambarUrl.isNotEmpty()) {
+                    Image(
+                        painter = rememberAsyncImagePainter(article.gambarUrl),
+                        contentDescription = article.judul,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(Icons.Default.Image, contentDescription = null, tint = Color.Gray)
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            val judul = if (index % 2 == 0)
-                "Pertolongan Pertama Cepat untuk Luka Bakar Ringan di Rumah"
-            else
-                "Hadapi Banjir: Langkah Persiapan Kunci Sebelum & Saat Air Naik"
-
             Text(
-                text = judul,
+                text = article.judul.ifEmpty { "-" },
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp,
                 maxLines = 2,
@@ -284,13 +439,13 @@ fun ArtikelCard(index: Int) {
                     tint = Color.Gray
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("22 April 2025", fontSize = 10.sp, color = Color.Gray)
+                Text(dateText, fontSize = 10.sp, color = Color.Gray)
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Luka bakar ringan sering terjadi. Ketahui langkah pendinginan dan perawatan yang tepat untuk mencegah infeksi...",
+                text = article.konten.ifEmpty { "Tidak ada deskripsi" },
                 fontSize = 11.sp,
                 color = Color.Gray,
                 maxLines = 3,

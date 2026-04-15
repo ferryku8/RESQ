@@ -1,6 +1,7 @@
 package com.uxonauts.resq.views.home
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.preference.PreferenceManager
@@ -46,8 +47,6 @@ import org.osmdroid.views.overlay.Marker
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.foundation.clickable
 
 enum class SosStep {
     CATEGORIES,
@@ -63,6 +62,133 @@ data class UserProfile(
 
 data class SosCategory(val name: String, val icon: ImageVector)
 
+private fun notifyEmergencyContacts(
+    firestore: FirebaseFirestore,
+    senderUserId: String,
+    senderName: String,
+    category: String,
+    address: String,
+    latitude: Double,
+    longitude: Double,
+    alertId: String
+) {
+    // Ambil semua kontak darurat milik user yang tekan SOS
+    firestore.collection("emergency_contacts")
+        .whereEqualTo("userId", senderUserId)
+        .get()
+        .addOnSuccessListener { contactsSnap ->
+            for (contactDoc in contactsSnap.documents) {
+                val contactPhone = contactDoc.getString("noTelepon") ?: continue
+                val contactName = contactDoc.getString("namaLengkap") ?: ""
+                val hubungan = contactDoc.getString("hubungan") ?: ""
+
+                // Normalisasi nomor telepon (hilangkan spasi, dll)
+                val normalizedPhone = contactPhone.replace(" ", "")
+                    .replace("-", "")
+                    .trim()
+
+                // Cari user yang punya nomor ini di collection users
+                firestore.collection("users")
+                    .whereEqualTo("noTelepon", normalizedPhone)
+                    .limit(1)
+                    .get()
+                    .addOnSuccessListener { userSnap ->
+                        if (!userSnap.isEmpty) {
+                            val targetDoc = userSnap.documents[0]
+                            val targetUserId = targetDoc.id
+
+                            // Jangan kirim ke diri sendiri
+                            if (targetUserId == senderUserId) return@addOnSuccessListener
+
+                            // Buat dokumen notifikasi darurat
+                            val notifData = hashMapOf(
+                                "alertId" to alertId,
+                                "targetUserId" to targetUserId,
+                                "senderUserId" to senderUserId,
+                                "senderName" to senderName,
+                                "senderPhone" to normalizedPhone,
+                                "contactName" to contactName,
+                                "hubungan" to hubungan,
+                                "category" to category,
+                                "address" to address,
+                                "latitude" to latitude,
+                                "longitude" to longitude,
+                                "read" to false,
+                                "timestamp" to com.google.firebase.Timestamp.now()
+                            )
+                            firestore.collection("emergency_notifications")
+                                .add(notifData)
+                        }
+                        // Kalau tidak ada match, skip (sesuai permintaan user)
+                    }
+            }
+        }
+}
+
+// Fungsi helper untuk memanggil sistem biometrik bawaan OS tanpa custom UI
+private fun authenticateWithBiometric(
+    context: Context,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
+) {
+    val activity = context as? FragmentActivity
+    if (activity == null) {
+        onError("Aktivitas tidak valid")
+        return
+    }
+
+    val biometricManager = BiometricManager.from(context)
+    when (biometricManager.canAuthenticate(
+        BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+    )) {
+        BiometricManager.BIOMETRIC_SUCCESS -> {
+            val executor = ContextCompat.getMainExecutor(context)
+            val biometricPrompt = BiometricPrompt(
+                activity,
+                executor,
+                object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                        super.onAuthenticationSucceeded(result)
+                        onSuccess()
+                    }
+
+                    override fun onAuthenticationFailed() {
+                        super.onAuthenticationFailed()
+                        onError("Verifikasi gagal, coba lagi.")
+                    }
+
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        super.onAuthenticationError(errorCode, errString)
+                        // Abaikan error jika user sengaja membatalkan/menutup prompt
+                        if (errorCode != BiometricPrompt.ERROR_USER_CANCELED &&
+                            errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
+                            errorCode != BiometricPrompt.ERROR_CANCELED
+                        ) {
+                            onError("Error: $errString")
+                        }
+                    }
+                }
+            )
+
+            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Verifikasi SOS Darurat")
+                .setSubtitle("Sentuh sensor sidik jari untuk mengirim laporan")
+                .setAllowedAuthenticators(
+                    BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                            BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                )
+                .build()
+
+            biometricPrompt.authenticate(promptInfo)
+        }
+        BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> onError("Perangkat tidak memiliki sensor biometrik")
+        BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> onError("Sensor biometrik tidak tersedia")
+        BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> onError("Belum ada sidik jari terdaftar di perangkat")
+        else -> onError("Biometrik tidak dapat digunakan")
+    }
+}
+
 @Composable
 fun SosSystemFlow(
     onNavigateBack: () -> Unit,
@@ -76,7 +202,6 @@ fun SosSystemFlow(
 
     var currentStep by remember { mutableStateOf(SosStep.CATEGORIES) }
     var selectedCategory by remember { mutableStateOf("") }
-    var showFingerprintDialog by remember { mutableStateOf(false) }
     var currentAlertId by remember { mutableStateOf("") }
 
     var isFetchingLocation by remember { mutableStateOf(false) }
@@ -97,33 +222,35 @@ fun SosSystemFlow(
     var alertStatus by remember { mutableStateOf("active") }
 
     // Fetch profile user saat pertama masuk
-    LaunchedEffect(userId) {
-        if (userId.isNotEmpty()) {
-            firestore.collection("users").document(userId).get()
-                .addOnSuccessListener { document ->
-                    if (document != null && document.exists()) {
-                        userName = document.getString("namaLengkap")
-                            ?: document.getString("fullName") ?: "Nama Tidak Ditemukan"
-                        userPhone = document.getString("noTelepon") ?: ""
-                    }
-                }
-                .addOnFailureListener { userName = "Nama Tidak Ditemukan" }
+    LaunchedEffect(currentAlertId) {
+        if (currentAlertId.isNotEmpty()) {
+            firestore.collection("sos_alerts").document(currentAlertId)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null || snapshot == null || !snapshot.exists()) return@addSnapshotListener
 
-            firestore.collection("medical_info").document(userId).get()
-                .addOnSuccessListener { document ->
-                    if (document != null && document.exists()) {
-                        bloodType = document.getString("golDarah")
-                            ?: document.getString("bloodType") ?: "-"
-                        allergies = document.getString("alergi")
-                            ?: document.getString("allergies") ?: "-"
-                        medicalHistory = document.getString("riwayatPenyakit")
-                            ?: document.getString("medicalConditions") ?: "-"
+                    alertStatus = snapshot.getString("status") ?: "active"
+                    petugasName = snapshot.getString("acceptedByName") ?: ""
+                    petugasRole = (snapshot.getLong("acceptedByRole") ?: 0L).toInt()
+                    petugasLat = snapshot.getDouble("petugasLat") ?: 0.0
+                    petugasLng = snapshot.getDouble("petugasLng") ?: 0.0
+
+                    // Auto kembali ke home saat status completed
+                    if (alertStatus == "completed") {
+                        android.widget.Toast.makeText(
+                            context,
+                            "Laporan SOS telah diselesaikan oleh petugas",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                        // Delay sedikit agar toast sempat terlihat
+                        kotlinx.coroutines.GlobalScope.launch {
+                            kotlinx.coroutines.delay(2000)
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                currentStep = SosStep.CATEGORIES
+                                currentAlertId = ""
+                                onNavigateBack()
+                            }
+                        }
                     }
-                }
-                .addOnFailureListener {
-                    bloodType = "-"
-                    allergies = "-"
-                    medicalHistory = "-"
                 }
         }
     }
@@ -158,7 +285,116 @@ fun SosSystemFlow(
                     onBackClick = onNavigateBack,
                     onCategoryClick = { category ->
                         selectedCategory = category
-                        showFingerprintDialog = true
+                        // Langsung jalankan fungsi sidik jari bawaan OS
+                        authenticateWithBiometric(
+                            context = context,
+                            onSuccess = {
+                                Toast.makeText(context, "Verifikasi Berhasil!", Toast.LENGTH_SHORT).show()
+                                isFetchingLocation = true
+
+                                val hasPerm = ContextCompat.checkSelfPermission(
+                                    context, Manifest.permission.ACCESS_FINE_LOCATION
+                                ) == PackageManager.PERMISSION_GRANTED
+
+                                if (!hasPerm) {
+                                    isFetchingLocation = false
+                                    Toast.makeText(context, "Izin lokasi diperlukan untuk SOS", Toast.LENGTH_LONG).show()
+                                    return@authenticateWithBiometric
+                                }
+
+                                try {
+                                    val cts = CancellationTokenSource()
+                                    fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
+                                        .addOnSuccessListener { location ->
+                                            if (location != null) {
+                                                userLat = location.latitude
+                                                userLng = location.longitude
+
+                                                coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                                    val addressText = try {
+                                                        val geocoder = Geocoder(context, Locale("id", "ID"))
+                                                        @Suppress("DEPRECATION")
+                                                        val list = geocoder.getFromLocation(userLat, userLng, 1)
+                                                        list?.firstOrNull()?.getAddressLine(0)
+                                                            ?: "Lat: $userLat, Lng: $userLng"
+                                                    } catch (e: Exception) {
+                                                        "Lat: $userLat, Lng: $userLng"
+                                                    }
+
+                                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                        currentLocation = addressText
+                                                        isFetchingLocation = false
+
+                                                        // Buat alert dengan struktur lengkap
+                                                        val sosData = hashMapOf(
+                                                            "userId" to userId,
+                                                            "userName" to userName,
+                                                            "userPhone" to "",
+                                                            "category" to selectedCategory,
+                                                            "location" to currentLocation,
+                                                            "address" to currentLocation,
+                                                            "latitude" to userLat,
+                                                            "longitude" to userLng,
+                                                            "timestamp" to com.google.firebase.Timestamp.now(),
+                                                            "status" to "active",
+                                                            "targetRoles" to CategoryRoleMapper.getTargetRoles(selectedCategory),
+                                                            "medicalInfo" to mapOf(
+                                                                "bloodType" to bloodType,
+                                                                "allergies" to allergies,
+                                                                "medicalHistory" to medicalHistory
+                                                            ),
+                                                            "acceptedBy" to "",
+                                                            "acceptedByName" to "",
+                                                            "acceptedByRole" to 0,
+                                                            "petugasLat" to 0.0,
+                                                            "petugasLng" to 0.0
+                                                        )
+                                                        firestore.collection("sos_alerts").add(sosData)
+                                                            .addOnSuccessListener { docRef ->
+                                                                currentAlertId = docRef.id
+
+                                                                // Kirim notifikasi ke kontak darurat yang punya akun
+                                                                notifyEmergencyContacts(
+                                                                    firestore = firestore,
+                                                                    senderUserId = userId,
+                                                                    senderName = userName,
+                                                                    category = selectedCategory,
+                                                                    address = currentLocation,
+                                                                    latitude = userLat,
+                                                                    longitude = userLng,
+                                                                    alertId = docRef.id
+                                                                )
+
+                                                                currentStep = SosStep.TRACKING_MAP
+                                                            }
+                                                            .addOnFailureListener { e ->
+                                                                Toast.makeText(context,
+                                                                    "Gagal kirim SOS: ${e.message}",
+                                                                    Toast.LENGTH_LONG).show()
+                                                            }
+                                                    }
+                                                }
+                                            } else {
+                                                isFetchingLocation = false
+                                                Toast.makeText(context,
+                                                    "Lokasi tidak ditemukan. Aktifkan GPS.",
+                                                    Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                        .addOnFailureListener {
+                                            isFetchingLocation = false
+                                            Toast.makeText(context,
+                                                "Gagal mengambil lokasi: ${it.message}",
+                                                Toast.LENGTH_LONG).show()
+                                        }
+                                } catch (e: SecurityException) {
+                                    isFetchingLocation = false
+                                }
+                            },
+                            onError = { errorMsg ->
+                                Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
+                            }
+                        )
                     }
                 )
             }
@@ -180,105 +416,6 @@ fun SosSystemFlow(
                     }
                 )
             }
-        }
-
-        if (showFingerprintDialog) {
-            FingerprintBottomSheet(
-                onDismiss = { showFingerprintDialog = false },
-                onAuthenticated = {
-                    showFingerprintDialog = false
-                    isFetchingLocation = true
-
-                    val hasPerm = ContextCompat.checkSelfPermission(
-                        context, Manifest.permission.ACCESS_FINE_LOCATION
-                    ) == PackageManager.PERMISSION_GRANTED
-
-                    if (!hasPerm) {
-                        isFetchingLocation = false
-                        Toast.makeText(context, "Izin lokasi diperlukan untuk SOS",
-                            Toast.LENGTH_LONG).show()
-                        return@FingerprintBottomSheet
-                    }
-
-                    try {
-                        val cts = CancellationTokenSource()
-                        fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
-                            .addOnSuccessListener { location ->
-                                if (location != null) {
-                                    userLat = location.latitude
-                                    userLng = location.longitude
-
-                                    coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                        val addressText = try {
-                                            val geocoder = Geocoder(context, Locale("id", "ID"))
-                                            @Suppress("DEPRECATION")
-                                            val list = geocoder.getFromLocation(userLat, userLng, 1)
-                                            list?.firstOrNull()?.getAddressLine(0)
-                                                ?: "Lat: $userLat, Lng: $userLng"
-                                        } catch (e: Exception) {
-                                            "Lat: $userLat, Lng: $userLng"
-                                        }
-
-                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                            currentLocation = addressText
-                                            isFetchingLocation = false
-
-                                            // Buat alert dengan struktur lengkap
-                                            val targetRoles = CategoryRoleMapper.getTargetRoles(selectedCategory)
-                                            val sosData = hashMapOf(
-                                                "userId" to userId,
-                                                "userName" to userName,
-                                                "userPhone" to userPhone,
-                                                "category" to selectedCategory,
-                                                "latitude" to userLat,
-                                                "longitude" to userLng,
-                                                "address" to currentLocation,
-                                                "status" to "active",
-                                                "targetRoles" to targetRoles,
-                                                "acceptedBy" to "",
-                                                "acceptedByName" to "",
-                                                "acceptedByRole" to 0,
-                                                "petugasLat" to 0.0,
-                                                "petugasLng" to 0.0,
-                                                "medicalInfo" to mapOf(
-                                                    "bloodType" to bloodType,
-                                                    "allergies" to allergies,
-                                                    "medicalHistory" to medicalHistory
-                                                ),
-                                                "timestamp" to com.google.firebase.Timestamp.now()
-                                            )
-
-                                            firestore.collection("sos_alerts")
-                                                .add(sosData)
-                                                .addOnSuccessListener { docRef ->
-                                                    currentAlertId = docRef.id
-                                                    currentStep = SosStep.TRACKING_MAP
-                                                }
-                                                .addOnFailureListener { e ->
-                                                    Toast.makeText(context,
-                                                        "Gagal kirim SOS: ${e.message}",
-                                                        Toast.LENGTH_LONG).show()
-                                                }
-                                        }
-                                    }
-                                } else {
-                                    isFetchingLocation = false
-                                    Toast.makeText(context,
-                                        "Lokasi tidak ditemukan. Aktifkan GPS.",
-                                        Toast.LENGTH_LONG).show()
-                                }
-                            }
-                            .addOnFailureListener {
-                                isFetchingLocation = false
-                                Toast.makeText(context,
-                                    "Gagal mengambil lokasi: ${it.message}",
-                                    Toast.LENGTH_LONG).show()
-                            }
-                    } catch (e: SecurityException) {
-                        isFetchingLocation = false
-                    }
-                }
-            )
         }
 
         if (isFetchingLocation) {
@@ -388,144 +525,6 @@ fun SosCategoryItem(category: SosCategory, onClick: () -> Unit) {
             color = Color.Black,
             textAlign = TextAlign.Center
         )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun FingerprintBottomSheet(
-    onDismiss: () -> Unit,
-    onAuthenticated: () -> Unit
-) {
-    val context = LocalContext.current
-    val activity = context as? FragmentActivity
-    var statusMessage by remember { mutableStateOf("Letakkan jari Anda pada sensor untuk memverifikasi laporan darurat ini.") }
-    var isError by remember { mutableStateOf(false) }
-
-    fun triggerBiometric() {
-        if (activity == null) {
-            Toast.makeText(context, "Aktivitas tidak valid", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val biometricManager = BiometricManager.from(context)
-        when (biometricManager.canAuthenticate(
-            BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                    BiometricManager.Authenticators.DEVICE_CREDENTIAL
-        )) {
-            BiometricManager.BIOMETRIC_SUCCESS -> {
-                val executor = ContextCompat.getMainExecutor(context)
-                val biometricPrompt = BiometricPrompt(
-                    activity,
-                    executor,
-                    object : BiometricPrompt.AuthenticationCallback() {
-                        override fun onAuthenticationSucceeded(
-                            result: BiometricPrompt.AuthenticationResult
-                        ) {
-                            super.onAuthenticationSucceeded(result)
-                            Toast.makeText(context, "Verifikasi Berhasil!", Toast.LENGTH_SHORT).show()
-                            onAuthenticated()
-                        }
-
-                        override fun onAuthenticationFailed() {
-                            super.onAuthenticationFailed()
-                            statusMessage = "Verifikasi gagal, coba lagi."
-                            isError = true
-                        }
-
-                        override fun onAuthenticationError(
-                            errorCode: Int,
-                            errString: CharSequence
-                        ) {
-                            super.onAuthenticationError(errorCode, errString)
-                            if (errorCode != BiometricPrompt.ERROR_USER_CANCELED &&
-                                errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
-                                errorCode != BiometricPrompt.ERROR_CANCELED
-                            ) {
-                                statusMessage = "Error: $errString"
-                                isError = true
-                                Toast.makeText(context, "Error: $errString", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
-                )
-
-                val promptInfo = BiometricPrompt.PromptInfo.Builder()
-                    .setTitle("Verifikasi SOS Darurat")
-                    .setSubtitle("Sentuh sensor sidik jari untuk mengirim laporan")
-                    .setAllowedAuthenticators(
-                        BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                                BiometricManager.Authenticators.DEVICE_CREDENTIAL
-                    )
-                    .build()
-
-                biometricPrompt.authenticate(promptInfo)
-            }
-
-            BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> {
-                statusMessage = "Perangkat tidak memiliki sensor biometrik"
-                isError = true
-            }
-            BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> {
-                statusMessage = "Sensor biometrik tidak tersedia"
-                isError = true
-            }
-            BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> {
-                statusMessage = "Belum ada sidik jari terdaftar di perangkat"
-                isError = true
-            }
-            else -> {
-                statusMessage = "Biometrik tidak dapat digunakan"
-                isError = true
-            }
-        }
-    }
-
-    LaunchedEffect(Unit) { triggerBiometric() }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = Color.White,
-        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 56.dp, top = 8.dp, start = 24.dp, end = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text("Verifikasi Sidik Jari", fontSize = 22.sp,
-                fontWeight = FontWeight.Bold, color = Color.Black)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = statusMessage,
-                fontSize = 14.sp,
-                color = if (isError) Color.Red else Color.Gray,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 32.dp)
-            )
-            Spacer(modifier = Modifier.height(40.dp))
-
-            Box(
-                modifier = Modifier
-                    .size(90.dp)
-                    .clip(CircleShape)
-                    .background(if (isError) Color.Red else Color(0xFF0084FF))
-                    .clickable { triggerBiometric() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Fingerprint,
-                    contentDescription = "Pemindai Sidik Jari",
-                    tint = Color.White,
-                    modifier = Modifier.size(48.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Ketuk untuk coba lagi", fontSize = 11.sp, color = Color.Gray)
-            Spacer(modifier = Modifier.height(16.dp))
-        }
     }
 }
 
@@ -649,6 +648,7 @@ fun SosMapScreen(
 
                 mv.invalidate()
             }
+        )
 
         IconButton(
             onClick = onBackClick,

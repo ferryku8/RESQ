@@ -4,9 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -39,9 +36,24 @@ import com.uxonauts.resq.models.LaporanKategori
 @Composable
 fun LaporanKategoriScreen(
     navController: NavController,
+    preselectedCategory: String = "",
     onKategoriSelected: (String, String) -> Unit
 ) {
     var expandedKategori by remember { mutableStateOf<String?>(null) }
+
+    // Auto-expand kategori yang di-preselect dari HomeScreen
+    LaunchedEffect(preselectedCategory) {
+        if (preselectedCategory.isNotEmpty()) {
+            // Match preselectedCategory (nama) ke id
+            val matched = KategoriLaporan.list.find { kat ->
+                kat.nama.contains(preselectedCategory, ignoreCase = true) ||
+                        preselectedCategory.contains(kat.nama, ignoreCase = true)
+            }
+            if (matched != null) {
+                expandedKategori = matched.id
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -127,7 +139,6 @@ private fun KategoriAccordion(
                         start = 16.dp, end = 16.dp, bottom = 16.dp
                     )
                 ) {
-                    // Grid sub-kategori
                     val chunked = kategori.subKategori.chunked(3)
                     chunked.forEach { row ->
                         Row(
@@ -153,7 +164,6 @@ private fun KategoriAccordion(
                                     )
                                 }
                             }
-                            // Fill empty slots
                             repeat(3 - row.size) {
                                 Spacer(Modifier.weight(1f))
                             }

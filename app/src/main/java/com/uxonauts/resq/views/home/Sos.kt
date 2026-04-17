@@ -72,7 +72,6 @@ private fun notifyEmergencyContacts(
     longitude: Double,
     alertId: String
 ) {
-    // Ambil semua kontak darurat milik user yang tekan SOS
     firestore.collection("emergency_contacts")
         .whereEqualTo("userId", senderUserId)
         .get()
@@ -82,12 +81,10 @@ private fun notifyEmergencyContacts(
                 val contactName = contactDoc.getString("namaLengkap") ?: ""
                 val hubungan = contactDoc.getString("hubungan") ?: ""
 
-                // Normalisasi nomor telepon (hilangkan spasi, dll)
                 val normalizedPhone = contactPhone.replace(" ", "")
                     .replace("-", "")
                     .trim()
 
-                // Cari user yang punya nomor ini di collection users
                 firestore.collection("users")
                     .whereEqualTo("noTelepon", normalizedPhone)
                     .limit(1)
@@ -97,10 +94,8 @@ private fun notifyEmergencyContacts(
                             val targetDoc = userSnap.documents[0]
                             val targetUserId = targetDoc.id
 
-                            // Jangan kirim ke diri sendiri
                             if (targetUserId == senderUserId) return@addOnSuccessListener
 
-                            // Buat dokumen notifikasi darurat
                             val notifData = hashMapOf(
                                 "alertId" to alertId,
                                 "targetUserId" to targetUserId,
@@ -119,13 +114,11 @@ private fun notifyEmergencyContacts(
                             firestore.collection("emergency_notifications")
                                 .add(notifData)
                         }
-                        // Kalau tidak ada match, skip (sesuai permintaan user)
                     }
             }
         }
 }
 
-// Fungsi helper untuk memanggil sistem biometrik bawaan OS tanpa custom UI
 private fun authenticateWithBiometric(
     context: Context,
     onSuccess: () -> Unit,
@@ -160,7 +153,6 @@ private fun authenticateWithBiometric(
 
                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                         super.onAuthenticationError(errorCode, errString)
-                        // Abaikan error jika user sengaja membatalkan/menutup prompt
                         if (errorCode != BiometricPrompt.ERROR_USER_CANCELED &&
                             errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
                             errorCode != BiometricPrompt.ERROR_CANCELED
@@ -214,14 +206,50 @@ fun SosSystemFlow(
     var allergies by remember { mutableStateOf("-") }
     var medicalHistory by remember { mutableStateOf("-") }
 
-    // State untuk data realtime petugas
     var petugasName by remember { mutableStateOf("") }
     var petugasRole by remember { mutableStateOf(0) }
     var petugasLat by remember { mutableStateOf(0.0) }
     var petugasLng by remember { mutableStateOf(0.0) }
     var alertStatus by remember { mutableStateOf("active") }
 
-    // Fetch profile user saat pertama masuk
+    // FETCH PROFIL USER (NAMA + INFO MEDIS) — INI YANG HILANG SEBELUMNYA
+    LaunchedEffect(userId) {
+        if (userId.isNotEmpty()) {
+            firestore.collection("users").document(userId).get()
+                .addOnSuccessListener { document ->
+                    if (document != null && document.exists()) {
+                        userName = document.getString("namaLengkap")
+                            ?: document.getString("fullName")
+                                    ?: "Pengguna"
+                        userPhone = document.getString("noTelepon") ?: ""
+                    } else {
+                        userName = "Pengguna"
+                    }
+                }
+                .addOnFailureListener {
+                    userName = "Pengguna"
+                }
+
+            firestore.collection("medical_info").document(userId).get()
+                .addOnSuccessListener { document ->
+                    if (document != null && document.exists()) {
+                        bloodType = document.getString("golDarah")
+                            ?: document.getString("bloodType") ?: "-"
+                        allergies = document.getString("alergi")
+                            ?: document.getString("allergies") ?: "-"
+                        medicalHistory = document.getString("riwayatPenyakit")
+                            ?: document.getString("medicalConditions") ?: "-"
+                    }
+                }
+                .addOnFailureListener {
+                    bloodType = "-"
+                    allergies = "-"
+                    medicalHistory = "-"
+                }
+        }
+    }
+
+    // Listen update dokumen sos_alerts yang aktif (untuk tracking petugas + auto-back saat completed)
     LaunchedEffect(currentAlertId) {
         if (currentAlertId.isNotEmpty()) {
             firestore.collection("sos_alerts").document(currentAlertId)
@@ -236,12 +264,11 @@ fun SosSystemFlow(
 
                     // Auto kembali ke home saat status completed
                     if (alertStatus == "completed") {
-                        android.widget.Toast.makeText(
+                        Toast.makeText(
                             context,
                             "Laporan SOS telah diselesaikan oleh petugas",
-                            android.widget.Toast.LENGTH_LONG
+                            Toast.LENGTH_LONG
                         ).show()
-                        // Delay sedikit agar toast sempat terlihat
                         kotlinx.coroutines.GlobalScope.launch {
                             kotlinx.coroutines.delay(2000)
                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -251,22 +278,6 @@ fun SosSystemFlow(
                             }
                         }
                     }
-                }
-        }
-    }
-
-    // Listen update dokumen sos_alerts yang aktif
-    LaunchedEffect(currentAlertId) {
-        if (currentAlertId.isNotEmpty()) {
-            firestore.collection("sos_alerts").document(currentAlertId)
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null || snapshot == null || !snapshot.exists()) return@addSnapshotListener
-
-                    alertStatus = snapshot.getString("status") ?: "active"
-                    petugasName = snapshot.getString("acceptedByName") ?: ""
-                    petugasRole = (snapshot.getLong("acceptedByRole") ?: 0L).toInt()
-                    petugasLat = snapshot.getDouble("petugasLat") ?: 0.0
-                    petugasLng = snapshot.getDouble("petugasLng") ?: 0.0
                 }
         }
     }
@@ -285,7 +296,6 @@ fun SosSystemFlow(
                     onBackClick = onNavigateBack,
                     onCategoryClick = { category ->
                         selectedCategory = category
-                        // Langsung jalankan fungsi sidik jari bawaan OS
                         authenticateWithBiometric(
                             context = context,
                             onSuccess = {
@@ -325,11 +335,10 @@ fun SosSystemFlow(
                                                         currentLocation = addressText
                                                         isFetchingLocation = false
 
-                                                        // Buat alert dengan struktur lengkap
                                                         val sosData = hashMapOf(
                                                             "userId" to userId,
                                                             "userName" to userName,
-                                                            "userPhone" to "",
+                                                            "userPhone" to userPhone,
                                                             "category" to selectedCategory,
                                                             "location" to currentLocation,
                                                             "address" to currentLocation,
@@ -353,7 +362,6 @@ fun SosSystemFlow(
                                                             .addOnSuccessListener { docRef ->
                                                                 currentAlertId = docRef.id
 
-                                                                // Kirim notifikasi ke kontak darurat yang punya akun
                                                                 notifyEmergencyContacts(
                                                                     firestore = firestore,
                                                                     senderUserId = userId,
@@ -561,7 +569,6 @@ fun SosMapScreen(
     var route by remember { mutableStateOf<com.uxonauts.resq.utils.RouteResult?>(null) }
     var hasCenteredMap by remember { mutableStateOf(false) }
 
-    // Hitung rute setiap kali petugas berpindah lokasi
     LaunchedEffect(petugasLat, petugasLng) {
         if (petugasLat != 0.0 && petugasLng != 0.0 && latitude != 0.0) {
             val r = com.uxonauts.resq.utils.RoutingHelper.getRoute(
@@ -590,7 +597,6 @@ fun SosMapScreen(
             update = { mv ->
                 mv.overlays.clear()
 
-                // Marker user (anda) - pin merah
                 val userMarker = Marker(mv)
                 userMarker.position = GeoPoint(latitude, longitude)
                 userMarker.title = "Lokasi Anda"
@@ -600,7 +606,6 @@ fun SosMapScreen(
                 userMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                 mv.overlays.add(userMarker)
 
-                // Marker petugas - dot biru
                 if (petugasLat != 0.0 && petugasLng != 0.0) {
                     val petugasMarker = Marker(mv)
                     petugasMarker.position = GeoPoint(petugasLat, petugasLng)
@@ -612,10 +617,8 @@ fun SosMapScreen(
                     mv.overlays.add(petugasMarker)
                 }
 
-                // Polyline dengan shadow effect
                 route?.let { r ->
                     if (r.points.isNotEmpty()) {
-                        // Shadow line (lapisan bawah)
                         val shadowLine = org.osmdroid.views.overlay.Polyline()
                         shadowLine.setPoints(r.points)
                         shadowLine.outlinePaint.color =
@@ -625,7 +628,6 @@ fun SosMapScreen(
                         shadowLine.outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
                         mv.overlays.add(shadowLine)
 
-                        // Main line
                         val mainLine = org.osmdroid.views.overlay.Polyline()
                         mainLine.setPoints(r.points)
                         mainLine.outlinePaint.color =
@@ -637,7 +639,6 @@ fun SosMapScreen(
                     }
                 }
 
-                // Center map sekali
                 if (!hasCenteredMap && petugasLat != 0.0) {
                     val centerLat = (latitude + petugasLat) / 2
                     val centerLng = (longitude + petugasLng) / 2
@@ -715,7 +716,6 @@ fun SosMapScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Distance & ETA card
                 if (route != null) {
                     Row(
                         modifier = Modifier

@@ -1,65 +1,114 @@
 package com.uxonauts.resq.views.home
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.LocalPolice
-import androidx.compose.material.icons.filled.Park
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Traffic
-import androidx.compose.material.icons.outlined.Article
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.rememberAsyncImagePainter
-import com.uxonauts.resq.controllers.Article
-import com.uxonauts.resq.controllers.ArticleController
+import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import java.text.SimpleDateFormat
 import java.util.Locale
+
+data class HomeArtikel(
+    val id: String = "",
+    val judul: String = "",
+    val konten: String = "",
+    val gambarUrl: String = "",
+    val tglPublish: Timestamp? = null,
+    val type: String = "article"
+)
+
+data class HomeBanner(
+    val id: String = "",
+    val judul: String = "",
+    val gambarUrl: String = "",
+    val konten: String = ""
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onSosClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
-    onLaporanClick: () -> Unit = {}
+    onLaporanClick: () -> Unit = {},
+    onLaporanCategoryClick: (String) -> Unit = {},
+    onArtikelListClick: () -> Unit = {},
+    onArtikelDetailClick: (String) -> Unit = {},
+    onRiwayatClick: () -> Unit = {},
+    onNotifikasiClick: () -> Unit = {}
 ) {
-    val articleController: ArticleController = viewModel()
+    val firestore = remember { FirebaseFirestore.getInstance() }
+    var userName by remember { mutableStateOf("Pengguna") }
+    var searchQuery by remember { mutableStateOf("") }
+
+    var articles by remember { mutableStateOf<List<HomeArtikel>>(emptyList()) }
+    var banners by remember { mutableStateOf<List<HomeBanner>>(emptyList()) }
 
     LaunchedEffect(Unit) {
-        articleController.fetchAll()
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return@LaunchedEffect
+        firestore.collection("users").document(uid).get()
+            .addOnSuccessListener { doc ->
+                userName = doc.getString("namaLengkap") ?: "Pengguna"
+            }
+    }
+
+    LaunchedEffect(Unit) {
+        firestore.collection("articles")
+            .orderBy("tglPublish", Query.Direction.DESCENDING)
+            .addSnapshotListener { snap, _ ->
+                if (snap != null) {
+                    val allDocs = snap.documents.map { doc ->
+                        HomeArtikel(
+                            id = doc.id,
+                            judul = doc.getString("judul") ?: "",
+                            konten = doc.getString("konten") ?: "",
+                            gambarUrl = doc.getString("gambarUrl") ?: "",
+                            tglPublish = doc.getTimestamp("tglPublish"),
+                            type = doc.getString("type") ?: "article"
+                        )
+                    }
+                    articles = allDocs.filter { it.type == "article" }
+                    banners = allDocs.filter { it.type == "banner" }.map {
+                        HomeBanner(it.id, it.judul, it.gambarUrl, it.konten)
+                    }
+                }
+            }
     }
 
     Scaffold(
@@ -85,202 +134,212 @@ fun HomeScreen(
         },
         floatingActionButtonPosition = FabPosition.Center,
         containerColor = Color(0xFFFBFBFB)
-    ) { paddingValues ->
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 16.dp)
+                .padding(padding)
                 .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-            HomeTopBar()
+            Spacer(Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(24.dp))
+            // Greeting
+            Text("Halo,", fontSize = 14.sp, color = Color.Gray)
+            Text(userName, fontSize = 22.sp, fontWeight = FontWeight.Bold)
 
-            BannerSection(banners = articleController.banners)
+            Spacer(Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(24.dp))
-            LaporanSection(onLaporanClick = onLaporanClick)
-
-            Spacer(modifier = Modifier.height(24.dp))
-            ArtikelSection(articles = articleController.articles)
-
-            Spacer(modifier = Modifier.height(80.dp))
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun HomeTopBar() {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        OutlinedTextField(
-            value = "",
-            onValueChange = {},
-            placeholder = { Text("Search", color = Color.Gray) },
-            leadingIcon = {
-                Icon(Icons.Outlined.Search, contentDescription = "Search", tint = Color(0xFFB3D9FF))
-            },
-            modifier = Modifier
-                .weight(1f)
-                .height(52.dp),
-            shape = RoundedCornerShape(24.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                focusedBorderColor = Color(0xFF0084FF),
-                unfocusedBorderColor = Color(0xFF0084FF),
-            ),
-            singleLine = true
-        )
-
-        Spacer(modifier = Modifier.width(16.dp))
-
-        Icon(
-            imageVector = Icons.Outlined.Article,
-            contentDescription = "Dokumen",
-            tint = Color(0xFF0084FF),
-            modifier = Modifier
-                .size(32.dp)
-                .clickable { }
-        )
-
-        Spacer(modifier = Modifier.width(12.dp))
-
-        Icon(
-            imageVector = Icons.Outlined.Notifications,
-            contentDescription = "Notifikasi",
-            tint = Color(0xFF0084FF),
-            modifier = Modifier
-                .size(32.dp)
-                .clickable { }
-        )
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun BannerSection(banners: List<Article>) {
-    if (banners.isEmpty()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(180.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFFE0E0E0)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.LocalHospital,
-                contentDescription = "Banner",
-                tint = Color.Gray,
-                modifier = Modifier.size(64.dp)
-            )
-        }
-        return
-    }
-
-    val pagerState = rememberPagerState(pageCount = { banners.size })
-
-    Column {
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(180.dp)
-        ) { page ->
-            val banner = banners[page]
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFFE0E0E0))
-            ) {
-                if (banner.gambarUrl.isNotEmpty()) {
-                    Image(
-                        painter = rememberAsyncImagePainter(banner.gambarUrl),
-                        contentDescription = banner.judul,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
+            // Search bar + Riwayat icon + Notifikasi icon
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Cari artikel...", color = Color.Gray) },
+                    leadingIcon = {
+                        Icon(Icons.Outlined.Search, null, tint = Color(0xFF0084FF))
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(50.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedBorderColor = Color(0xFF0084FF),
+                        unfocusedBorderColor = Color(0xFFE0E0E0)
                     )
-                } else {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Image,
-                            contentDescription = null,
-                            tint = Color.Gray,
-                            modifier = Modifier.size(48.dp)
-                        )
+                )
+                Spacer(Modifier.width(4.dp))
+                IconButton(onClick = onRiwayatClick) {
+                    Icon(
+                        Icons.Default.Description, "Riwayat",
+                        tint = Color(0xFF0084FF),
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+                IconButton(onClick = onNotifikasiClick) {
+                    Icon(
+                        Icons.Outlined.Notifications, "Notifikasi",
+                        tint = Color(0xFF0084FF),
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // FIX 1: Banner section — full width, tidak kepotong
+            if (banners.isNotEmpty()) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(banners) { banner ->
+                        BannerCard(banner) {
+                            onArtikelDetailClick(banner.id)
+                        }
                     }
                 }
+                Spacer(Modifier.height(24.dp))
+            }
 
+            // FIX 2: Layanan Laporan + "Lihat Semua"
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Layanan Laporan", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                TextButton(onClick = onLaporanClick) {
+                    Text("Lihat Semua", color = Color(0xFF0084FF), fontSize = 13.sp)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                LaporanIconCard(
+                    label = "Kejahatan &\nKeamanan",
+                    icon = Icons.Default.LocalPolice,
+                    color = Color(0xFF1565C0),
+                    modifier = Modifier.weight(1f)
+                ) { onLaporanCategoryClick("Kejahatan & Keamanan") }
+
+                Spacer(Modifier.width(8.dp))
+
+                LaporanIconCard(
+                    label = "Kecelakaan\nLalu Lintas",
+                    icon = Icons.Default.Traffic,
+                    color = Color(0xFFE65100),
+                    modifier = Modifier.weight(1f)
+                ) { onLaporanCategoryClick("Kecelakaan Lalu Lintas") }
+
+                Spacer(Modifier.width(8.dp))
+
+                LaporanIconCard(
+                    label = "Infrastruktur\n& Lingkungan",
+                    icon = Icons.Default.LocalFireDepartment,
+                    color = Color(0xFF2E7D32),
+                    modifier = Modifier.weight(1f)
+                ) { onLaporanCategoryClick("Infrastruktur & Lingkungan") }
+
+                Spacer(Modifier.width(8.dp))
+
+                LaporanIconCard(
+                    label = "Layanan\nPublik",
+                    icon = Icons.Default.MedicalServices,
+                    color = Color(0xFF6A1B9A),
+                    modifier = Modifier.weight(1f)
+                ) { onLaporanCategoryClick("Layanan Publik") }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            // Artikel section
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Artikel", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                TextButton(onClick = onArtikelListClick) {
+                    Text("Lihat Semua", color = Color(0xFF0084FF), fontSize = 13.sp)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+
+            val filteredArticles = if (searchQuery.isBlank()) articles
+            else articles.filter {
+                it.judul.contains(searchQuery, ignoreCase = true) ||
+                        it.konten.contains(searchQuery, ignoreCase = true)
+            }
+
+            if (filteredArticles.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        if (searchQuery.isBlank()) "Belum ada artikel"
+                        else "Tidak ditemukan artikel untuk \"$searchQuery\"",
+                        color = Color.Gray, fontSize = 13.sp
+                    )
+                }
+            } else {
+                // FIX 3: Artikel cards ukuran sama
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(filteredArticles) { artikel ->
+                        HomeArtikelCard(artikel) {
+                            onArtikelDetailClick(artikel.id)
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(120.dp))
+        }
+    }
+}
+
+// FIX 1: Banner card — aspect ratio 16:9, tidak kepotong
+@Composable
+private fun BannerCard(banner: HomeBanner, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(16f / 9f)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (banner.gambarUrl.isNotEmpty()) {
+                Image(
+                    painter = rememberAsyncImagePainter(banner.gambarUrl),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.65f)
-                                ),
-                                startY = 200f
-                            )
-                        )
-                )
-
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(16.dp)
+                        .background(Color(0xFF0084FF)),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
                         banner.judul,
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (banner.konten.isNotEmpty()) {
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            banner.konten,
-                            color = Color.White.copy(alpha = 0.9f),
-                            fontSize = 11.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-        }
-
-        if (banners.size > 1) {
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                repeat(banners.size) { i ->
-                    val selected = i == pagerState.currentPage
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 3.dp)
-                            .size(if (selected) 8.dp else 6.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (selected) Color(0xFF0084FF)
-                                else Color(0xFFB3D9FF)
-                            )
+                        modifier = Modifier.padding(16.dp)
                     )
                 }
             }
@@ -289,187 +348,124 @@ fun BannerSection(banners: List<Article>) {
 }
 
 @Composable
-fun LaporanSection(onLaporanClick: () -> Unit = {}) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("Laporan", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF222222))
-        Text(
-            "Lihat semua",
-            fontSize = 14.sp,
-            color = Color(0xFFB3D9FF),
-            modifier = Modifier.clickable { onLaporanClick() }
-        )
-    }
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        LaporanIconCard(Icons.Default.LocalPolice, onLaporanClick)
-        LaporanIconCard(Icons.Default.Traffic, onLaporanClick)
-        LaporanIconCard(Icons.Default.Park, onLaporanClick)
-        LaporanIconCard(Icons.Default.SmartToy, onLaporanClick)
-    }
-}
-
-@Composable
-fun LaporanIconCard(icon: ImageVector, onClick: () -> Unit = {}) {
-    Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier
-            .size(75.dp)
+private fun LaporanIconCard(
+    label: String,
+    icon: ImageVector,
+    color: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White)
             .clickable { onClick() }
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = Color(0xFF0084FF),
-                modifier = Modifier.size(36.dp)
-            )
-        }
-    }
-}
-
-@Composable
-fun ArtikelSection(articles: List<Article>) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("Artikel", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF222222))
-        Text(
-            "Lihat semua",
-            fontSize = 14.sp,
-            color = Color(0xFFB3D9FF),
-            modifier = Modifier.clickable { }
-        )
-    }
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    if (articles.isEmpty()) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(100.dp),
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(color.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                "Belum ada artikel",
-                color = Color.Gray,
-                fontSize = 13.sp
-            )
+            Icon(icon, null, tint = color, modifier = Modifier.size(28.dp))
         }
-    } else {
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            items(articles) { article ->
-                ArtikelCard(article)
-            }
-        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            label,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            color = Color.DarkGray,
+            lineHeight = 13.sp,
+            textAlign = TextAlign.Center,
+            maxLines = 2
+        )
     }
 }
 
+// FIX 3: Artikel card — fixed height supaya ukuran seragam
 @Composable
-fun ArtikelCard(article: Article) {
-    val dateText = article.tglPublish?.toDate()?.let {
+private fun HomeArtikelCard(artikel: HomeArtikel, onClick: () -> Unit) {
+    val dateText = artikel.tglPublish?.toDate()?.let {
         SimpleDateFormat("d MMMM yyyy", Locale("id", "ID")).format(it)
-    } ?: "-"
+    } ?: ""
 
     Card(
-        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .width(200.dp)
+            .height(280.dp)
+            .clickable { onClick() },
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier.width(260.dp)
+        shape = RoundedCornerShape(12.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp)
-        ) {
+        Column {
+            // Gambar — fixed height
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(120.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
                     .background(Color(0xFFE0E0E0)),
                 contentAlignment = Alignment.Center
             ) {
-                if (article.gambarUrl.isNotEmpty()) {
+                if (artikel.gambarUrl.isNotEmpty()) {
                     Image(
-                        painter = rememberAsyncImagePainter(article.gambarUrl),
-                        contentDescription = article.judul,
+                        painter = rememberAsyncImagePainter(artikel.gambarUrl),
+                        contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
                 } else {
-                    Icon(Icons.Default.Image, contentDescription = null, tint = Color.Gray)
+                    Icon(
+                        Icons.Default.Image, null,
+                        tint = Color.Gray,
+                        modifier = Modifier.size(32.dp)
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = article.judul.ifEmpty { "-" },
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                color = Color(0xFF222222)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.CalendarToday,
-                    contentDescription = null,
-                    modifier = Modifier.size(10.dp),
-                    tint = Color.Gray
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(dateText, fontSize = 10.sp, color = Color.Gray)
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = article.konten.ifEmpty { "Tidak ada deskripsi" },
-                fontSize = 11.sp,
-                color = Color.Gray,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                lineHeight = 16.sp
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = { },
+            // Konten — mengisi sisa ruang
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(40.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0084FF)),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(0.dp)
+                    .weight(1f)
+                    .padding(10.dp)
             ) {
-                Text("Lihat Lebih Lanjut", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    artikel.judul,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 16.sp
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.CalendarToday, null,
+                        modifier = Modifier.size(10.dp), tint = Color.Gray
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(dateText, fontSize = 10.sp, color = Color.Gray)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    artikel.konten,
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 14.sp
+                )
             }
         }
     }
 }
 
+// FIX 4: Bottom bar — icon Home dan Profile yang benar
 @Composable
 fun HomeBottomBar(
     onHomeClick: () -> Unit = {},
@@ -492,7 +488,7 @@ fun HomeBottomBar(
             IconButton(onClick = onHomeClick) {
                 Icon(
                     imageVector = if (selectedTab == "home")
-                        Icons.Filled.Home
+                        androidx.compose.material.icons.Icons.Filled.Home
                     else
                         androidx.compose.material.icons.Icons.Outlined.Home,
                     contentDescription = "Home",
@@ -506,9 +502,9 @@ fun HomeBottomBar(
             IconButton(onClick = onProfileClick) {
                 Icon(
                     imageVector = if (selectedTab == "profile")
-                        Icons.Filled.Person
+                        androidx.compose.material.icons.Icons.Filled.Person
                     else
-                        androidx.compose.material.icons.Icons.Outlined.Person,
+                        Icons.Outlined.Person,
                     contentDescription = "Profile",
                     tint = Color(0xFF0084FF),
                     modifier = Modifier.size(32.dp)

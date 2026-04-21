@@ -30,13 +30,13 @@ fun BiometricSetupScreen(navController: NavController, controller: AuthControlle
     val context = LocalContext.current
     val activity = context as? FragmentActivity
 
-    // Cek apakah perangkat mendukung biometrik
+    
     fun checkBiometricSupport(): Boolean {
         val biometricManager = BiometricManager.from(context)
         return when (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)) {
             BiometricManager.BIOMETRIC_SUCCESS -> true
             else -> {
-                // Jika di emulator belum setup fingerprint, ini akan return false
+                
                 Toast.makeText(context, "Perangkat/Emulator tidak mendukung biometrik atau belum disetup.", Toast.LENGTH_LONG).show()
                 false
             }
@@ -58,7 +58,7 @@ fun BiometricSetupScreen(navController: NavController, controller: AuthControlle
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                     super.onAuthenticationError(errorCode, errString)
-                    // Abaikan error jika user menekan tombol 'Cancel' / back
+                    
                     if (errorCode != BiometricPrompt.ERROR_USER_CANCELED && errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
                         Toast.makeText(context, "Error: $errString", Toast.LENGTH_SHORT).show()
                     }
@@ -96,7 +96,7 @@ fun BiometricSetupScreen(navController: NavController, controller: AuthControlle
         )
         Spacer(modifier = Modifier.height(48.dp))
 
-        // Tombol Aktifkan
+        
         Button(
             onClick = { authenticateBiometric() },
             modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -108,7 +108,7 @@ fun BiometricSetupScreen(navController: NavController, controller: AuthControlle
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Tombol Lewati
+        
         OutlinedButton(
             onClick = {
                 controller.isBiometricEnabled = false

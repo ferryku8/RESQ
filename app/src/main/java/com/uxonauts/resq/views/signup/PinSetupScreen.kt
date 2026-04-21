@@ -39,7 +39,7 @@ fun PinSetupScreen(navController: NavController, controller: AuthController) {
         )
         Spacer(modifier = Modifier.height(48.dp))
 
-        // Input PIN (Invisible TextField di atas kotak visual)
+        
         BasicTextField(
             value = controller.pinCode,
             onValueChange = {
@@ -71,7 +71,7 @@ fun PinSetupScreen(navController: NavController, controller: AuthController) {
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (char.toString().isNotEmpty()) "●" else "", // Sembunyikan angka dengan dot
+                                text = if (char.toString().isNotEmpty()) "●" else "", 
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = ResqBlue

@@ -45,7 +45,7 @@ fun SignUpStep1(controller: AuthController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // Error states per field
+    
     var firstNameError by remember { mutableStateOf<String?>(null) }
     var genderError by remember { mutableStateOf<String?>(null) }
     var dobError by remember { mutableStateOf<String?>(null) }
@@ -54,31 +54,31 @@ fun SignUpStep1(controller: AuthController) {
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
 
-    // Tanggal lahir picker — batasi max date = 17 tahun lalu
+    
     val calendar = Calendar.getInstance()
     val datePickerDialog = DatePickerDialog(
         context,
         { _, year, month, dayOfMonth ->
             controller.dateOfBirth = "$dayOfMonth/${month + 1}/$year"
             dobError = null
-            // Cek usia setelah pilih tanggal
+            
             val age = calculateAge(year, month, dayOfMonth)
             if (age < 17) {
                 dobError = "Anda harus berusia minimal 17 tahun untuk mendaftar"
-                controller.dateOfBirth = "" // Reset
+                controller.dateOfBirth = "" 
             }
         },
-        calendar.get(Calendar.YEAR) - 17, // Default ke 17 tahun lalu
+        calendar.get(Calendar.YEAR) - 17, 
         calendar.get(Calendar.MONTH),
         calendar.get(Calendar.DAY_OF_MONTH)
     ).apply {
-        // Batasi: tidak boleh pilih tanggal lebih muda dari 17 tahun
+        
         val maxDate = Calendar.getInstance()
         maxDate.add(Calendar.YEAR, -17)
         datePicker.maxDate = maxDate.timeInMillis
     }
 
-    // GPS
+    
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
     var isGettingLocation by remember { mutableStateOf(false) }
 
@@ -143,7 +143,7 @@ fun SignUpStep1(controller: AuthController) {
         if (isGranted) fetchCurrentLocation()
     }
 
-    // Fungsi validasi semua field sebelum lanjut
+    
     fun validateAndContinue() {
         firstNameError = null
         genderError = null
@@ -172,7 +172,7 @@ fun SignUpStep1(controller: AuthController) {
             dobError = "Tanggal lahir wajib dipilih"
             hasError = true
         } else {
-            // Parse dan cek usia
+            
             try {
                 val parts = controller.dateOfBirth.split("/")
                 val day = parts[0].toInt()
@@ -308,7 +308,7 @@ fun SignUpStep1(controller: AuthController) {
             }
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Tanggal Lahir
+            
             OutlinedTextField(
                 value = controller.dateOfBirth,
                 onValueChange = {},
@@ -335,7 +335,7 @@ fun SignUpStep1(controller: AuthController) {
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Alamat
+            
             OutlinedTextField(
                 value = controller.address,
                 onValueChange = {
@@ -385,7 +385,7 @@ fun SignUpStep1(controller: AuthController) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Telepon
+            
             OutlinedTextField(
                 value = controller.phone,
                 onValueChange = {
@@ -405,7 +405,7 @@ fun SignUpStep1(controller: AuthController) {
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Email
+            
             OutlinedTextField(
                 value = controller.email,
                 onValueChange = {
@@ -425,7 +425,7 @@ fun SignUpStep1(controller: AuthController) {
             )
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Password
+            
             OutlinedTextField(
                 value = controller.password,
                 onValueChange = {
@@ -474,7 +474,7 @@ private fun calculateAge(year: Int, month: Int, day: Int): Int {
     val today = Calendar.getInstance()
     var age = today.get(Calendar.YEAR) - year
 
-    // Kalau belum ulang tahun tahun ini, kurangi 1
+    
     if (today.get(Calendar.MONTH) < month ||
         (today.get(Calendar.MONTH) == month && today.get(Calendar.DAY_OF_MONTH) < day)
     ) {

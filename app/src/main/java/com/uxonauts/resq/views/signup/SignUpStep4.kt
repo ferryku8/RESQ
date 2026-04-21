@@ -130,7 +130,7 @@ fun SignUpStep4(controller: AuthController, navController: NavController) {
             contactError = "Tidak boleh menggunakan nomor telepon Anda sendiri sebagai kontak darurat"
             return
         }
-        // Cek duplikat
+        
         val existingNumbers = controller.savedContacts.map {
             it.noTelepon.replace(Regex("[^0-9]"), "")
         }
@@ -162,7 +162,7 @@ fun SignUpStep4(controller: AuthController, navController: NavController) {
             )
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Error dari Firebase (saat submit)
+            
             controller.errorMessage?.let {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -180,7 +180,7 @@ fun SignUpStep4(controller: AuthController, navController: NavController) {
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            // Error validasi kontak
+            
             if (contactError != null) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),

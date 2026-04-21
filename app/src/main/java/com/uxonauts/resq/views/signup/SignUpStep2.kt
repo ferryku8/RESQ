@@ -44,15 +44,15 @@ fun SignUpStep2(controller: AuthController) {
     var showSourceDialog by remember { mutableStateOf(false) }
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
 
-    // Fungsi untuk membuat file sementara bagi hasil foto kamera
+    
     fun createTempImageUri(context: Context): Uri {
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val imageFileName = "JPEG_" + timeStamp + "_"
         val storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
         val image = File.createTempFile(imageFileName, ".jpg", storageDir)
 
-        // Pastikan authority sama dengan applicationId di build.gradle + ".provider"
-        // Anda perlu mendaftarkan provider ini di AndroidManifest.xml (lihat instruksi di bawah)
+        
+        
         return FileProvider.getUriForFile(
             context,
             "${context.packageName}.provider",
@@ -60,14 +60,14 @@ fun SignUpStep2(controller: AuthController) {
         )
     }
 
-    // Launcher Galeri
+    
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let { controller.validateKtpImage(context, it) }
     }
 
-    // Launcher Kamera
+    
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
@@ -76,7 +76,7 @@ fun SignUpStep2(controller: AuthController) {
         }
     }
 
-    // Launcher Izin Kamera
+    
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -88,7 +88,7 @@ fun SignUpStep2(controller: AuthController) {
         }
     }
 
-    // Dialog Pilihan Sumber Gambar
+    
     if (showSourceDialog) {
         AlertDialog(
             onDismissRequest = { showSourceDialog = false },
@@ -155,7 +155,7 @@ fun SignUpStep2(controller: AuthController) {
                 .border(2.dp, if(controller.isStep2Valid()) ResqBlue else ResqLightBlue, RoundedCornerShape(12.dp))
                 .clip(RoundedCornerShape(12.dp))
                 .clickable(enabled = !controller.isKtpValidating) {
-                    showSourceDialog = true // Munculkan dialog pilihan
+                    showSourceDialog = true 
                 },
             contentAlignment = Alignment.Center
         ) {

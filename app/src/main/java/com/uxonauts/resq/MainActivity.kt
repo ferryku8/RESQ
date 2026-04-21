@@ -16,34 +16,31 @@ import androidx.fragment.app.FragmentActivity
 import com.google.firebase.auth.FirebaseAuth
 import com.uxonauts.resq.services.EmergencyListenerService
 import com.uxonauts.resq.views.signup.ResqAuthApp
+import com.uxonauts.resq.views.ui.theme.RESQTheme
 
 class MainActivity : FragmentActivity() {
 
-    private val notificationPermLauncher = registerForActivityResult(
+    private val locationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        // Setelah lokasi di-handle, minta notifikasi
+        requestNotificationPermission()
+    }
+
+    private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) startEmergencyListenerIfNeeded()
+        startServiceIfLoggedIn()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Minta izin notifikasi (Android 13+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val granted = ContextCompat.checkSelfPermission(
-                this, Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-            if (!granted) {
-                notificationPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else {
-                startEmergencyListenerIfNeeded()
-            }
-        } else {
-            startEmergencyListenerIfNeeded()
-        }
+        // MINTA IZIN LOKASI SAAT PERTAMA BUKA
+        requestLocationPermission()
 
         setContent {
-            MaterialTheme {
+            RESQTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -54,7 +51,44 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    private fun startEmergencyListenerIfNeeded() {
+    private fun requestLocationPermission() {
+        val fineLocation = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        )
+        val coarseLocation = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+
+        if (fineLocation != PackageManager.PERMISSION_GRANTED ||
+            coarseLocation != PackageManager.PERMISSION_GRANTED
+        ) {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        } else {
+            requestNotificationPermission()
+        }
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val notifPerm = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.POST_NOTIFICATIONS
+            )
+            if (notifPerm != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                startServiceIfLoggedIn()
+            }
+        } else {
+            startServiceIfLoggedIn()
+        }
+    }
+
+    private fun startServiceIfLoggedIn() {
         if (FirebaseAuth.getInstance().currentUser != null) {
             val intent = Intent(this, EmergencyListenerService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

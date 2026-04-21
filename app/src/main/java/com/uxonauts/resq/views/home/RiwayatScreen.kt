@@ -10,7 +10,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,7 +24,6 @@ import androidx.navigation.NavController
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -35,7 +33,7 @@ data class RiwayatItem(
     val subtitle: String,
     val status: String,
     val timestamp: Timestamp?,
-    val type: String // "report" atau "sos"
+    val type: String
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,20 +48,23 @@ fun RiwayatScreen(navController: NavController) {
     val dateFormat = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale("id", "ID")) }
 
     LaunchedEffect(uid) {
-        if (uid.isEmpty()) return@LaunchedEffect
+        if (uid.isEmpty()) {
+            loading = false
+            return@LaunchedEffect
+        }
         val allItems = mutableListOf<RiwayatItem>()
 
-        // Fetch laporan non-darurat milik user ini
+        // Fetch laporan — TANPA orderBy (hindari composite index)
         firestore.collection("reports")
             .whereEqualTo("userId", uid)
-            .orderBy("tanggalLapor", Query.Direction.DESCENDING)
             .get()
             .addOnSuccessListener { snap ->
                 for (doc in snap.documents) {
                     allItems.add(
                         RiwayatItem(
                             id = doc.id,
-                            title = doc.getString("subJenis") ?: doc.getString("jenisLaporan") ?: "-",
+                            title = doc.getString("subJenis")
+                                ?: doc.getString("jenisLaporan") ?: "-",
                             subtitle = doc.getString("judul") ?: "-",
                             status = doc.getString("status") ?: "Menunggu",
                             timestamp = doc.getTimestamp("tanggalLapor"),
@@ -72,10 +73,9 @@ fun RiwayatScreen(navController: NavController) {
                     )
                 }
 
-                // Fetch SOS milik user ini
+                // Fetch SOS — TANPA orderBy
                 firestore.collection("sos_alerts")
                     .whereEqualTo("userId", uid)
-                    .orderBy("timestamp", Query.Direction.DESCENDING)
                     .get()
                     .addOnSuccessListener { sosSnap ->
                         for (doc in sosSnap.documents) {
@@ -91,20 +91,30 @@ fun RiwayatScreen(navController: NavController) {
                                 RiwayatItem(
                                     id = doc.id,
                                     title = "SOS ${doc.getString("category") ?: ""}",
-                                    subtitle = doc.getString("address") ?: doc.getString("location") ?: "-",
+                                    subtitle = doc.getString("address")
+                                        ?: doc.getString("location") ?: "-",
                                     status = statusLabel,
                                     timestamp = doc.getTimestamp("timestamp"),
                                     type = "sos"
                                 )
                             )
                         }
-                        // Sort combined by timestamp desc
-                        items = allItems.sortedByDescending { it.timestamp?.seconds ?: 0 }
+                        // Sort di memory — terbaru dulu
+                        items = allItems.sortedByDescending {
+                            it.timestamp?.seconds ?: 0
+                        }
                         loading = false
                     }
-                    .addOnFailureListener { loading = false }
+                    .addOnFailureListener {
+                        items = allItems.sortedByDescending {
+                            it.timestamp?.seconds ?: 0
+                        }
+                        loading = false
+                    }
             }
-            .addOnFailureListener { loading = false }
+            .addOnFailureListener {
+                loading = false
+            }
     }
 
     Scaffold(
@@ -131,7 +141,6 @@ fun RiwayatScreen(navController: NavController) {
         ) {
             Spacer(Modifier.height(8.dp))
 
-            // Tab filter
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -144,14 +153,18 @@ fun RiwayatScreen(navController: NavController) {
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(if (selectedTab == tab) Color(0xFF0084FF) else Color.Transparent)
+                            .background(
+                                if (selectedTab == tab) Color(0xFF0084FF)
+                                else Color.Transparent
+                            )
                             .clickable { selectedTab = tab }
                             .padding(vertical = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             tab,
-                            color = if (selectedTab == tab) Color.White else Color(0xFF0084FF),
+                            color = if (selectedTab == tab) Color.White
+                            else Color(0xFF0084FF),
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )
@@ -228,19 +241,28 @@ private fun RiwayatCard(
                 contentAlignment = Alignment.Center
             ) {
                 if (isSos) {
-                    Text("SOS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text(
+                        "SOS", color = Color.White,
+                        fontWeight = FontWeight.Bold, fontSize = 12.sp
+                    )
                 } else {
-                    Icon(Icons.Default.Description, null, tint = Color.White,
-                        modifier = Modifier.size(24.dp))
+                    Icon(
+                        Icons.Default.Description, null, tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(item.title, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    item.title, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
                 Spacer(Modifier.height(2.dp))
-                Text(item.subtitle, fontSize = 12.sp, color = Color.DarkGray,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    item.subtitle, fontSize = 12.sp, color = Color.DarkGray,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
                 Spacer(Modifier.height(2.dp))
                 Text(dateText, fontSize = 11.sp, color = Color.Gray)
             }
@@ -251,8 +273,10 @@ private fun RiwayatCard(
                     .background(statusColor.copy(alpha = 0.15f))
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
-                Text(item.status, fontSize = 11.sp, color = statusColor,
-                    fontWeight = FontWeight.Bold)
+                Text(
+                    item.status, fontSize = 11.sp, color = statusColor,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

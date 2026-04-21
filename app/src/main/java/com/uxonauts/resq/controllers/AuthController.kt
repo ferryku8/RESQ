@@ -9,9 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import com.uxonauts.resq.models.*
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.uxonauts.resq.utils.KtpValidator
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
@@ -28,8 +26,6 @@ class AuthController : ViewModel() {
 
     var isLoading by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
-
-    var isKtpValidating by mutableStateOf(false)
 
     // State Login
     var loginEmail by mutableStateOf("")
@@ -54,6 +50,8 @@ class AuthController : ViewModel() {
 
     // Step 2: KTP
     var ktpImageUri by mutableStateOf<Uri?>(null)
+    var isKtpValidating by mutableStateOf(false)
+    var isKtpValid by mutableStateOf(false)
 
     // Step 3: Medis
     var height by mutableStateOf("")
@@ -86,8 +84,8 @@ class AuthController : ViewModel() {
                 password.length >= 6
     }
 
-    // Validasi Step 2
-    fun isStep2Valid(): Boolean = ktpImageUri != null && !isKtpValidating
+    // Validasi Step 2 — harus KTP valid dan tidak sedang validasi
+    fun isStep2Valid(): Boolean = ktpImageUri != null && isKtpValid && !isKtpValidating
 
     // Validasi Step 3
     fun isStep3Valid(): Boolean {
@@ -118,33 +116,29 @@ class AuthController : ViewModel() {
         return digest.fold("") { str, it -> str + "%02x".format(it) }
     }
 
+    /**
+     * Validasi foto KTP menggunakan ML Kit OCR.
+     * Cek apakah gambar mengandung kata kunci KTP Indonesia.
+     * Kalau valid → ktpImageUri di-set, isKtpValid = true
+     * Kalau tidak valid → ktpImageUri di-reset null, errorMessage tampil
+     */
     fun validateKtpImage(context: Context, uri: Uri) {
         isKtpValidating = true
+        isKtpValid = false
         errorMessage = null
-        try {
-            val image = InputImage.fromFilePath(context, uri)
-            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-            recognizer.process(image)
-                .addOnSuccessListener { visionText ->
-                    val text = visionText.text.uppercase()
-                    val isValidKtp = text.contains("NIK") || text.contains("PROVINSI") ||
-                            text.contains("KABUPATEN") || text.contains("KOTA") ||
-                            text.contains("KARTU TANDA PENDUDUK")
+        ktpImageUri = uri  // Set dulu untuk preview loading
 
-                    if (isValidKtp) {
-                        ktpImageUri = uri
-                    } else {
-                        ktpImageUri = uri
-                        // errorMessage = "Foto tidak terdeteksi sebagai KTP yang valid."
-                    }
-                    isKtpValidating = false
-                }
-                .addOnFailureListener {
-                    ktpImageUri = uri
-                    isKtpValidating = false
-                }
-        } catch (e: Exception) {
+        KtpValidator.validate(context, uri) { valid, message ->
             isKtpValidating = false
+            if (valid) {
+                isKtpValid = true
+                ktpImageUri = uri
+                errorMessage = null
+            } else {
+                isKtpValid = false
+                ktpImageUri = null  // Reset karena bukan KTP
+                errorMessage = message
+            }
         }
     }
 
@@ -182,6 +176,28 @@ class AuthController : ViewModel() {
         }
     }
 
+    private fun formatRegistrationError(error: String): String {
+        return when {
+            error.contains("email address is already", ignoreCase = true) ->
+                "Email ini sudah terdaftar. Silakan gunakan email lain atau login dengan akun yang sudah ada."
+
+            error.contains("email address is badly", ignoreCase = true) ->
+                "Format email tidak valid. Periksa kembali alamat email Anda."
+
+            error.contains("password", ignoreCase = true) && error.contains("weak", ignoreCase = true) ->
+                "Kata sandi terlalu lemah. Gunakan minimal 6 karakter dengan kombinasi huruf dan angka."
+
+            error.contains("network", ignoreCase = true) ->
+                "Tidak ada koneksi internet. Periksa jaringan Anda dan coba lagi."
+
+            error.contains("blocked", ignoreCase = true) ||
+                    error.contains("unusual activity", ignoreCase = true) ->
+                "Terlalu banyak percobaan. Silakan coba lagi dalam beberapa menit."
+
+            else -> "Pendaftaran gagal: $error"
+        }
+    }
+
     fun submitRegistration(navController: NavController) {
         viewModelScope.launch {
             isLoading = true
@@ -215,8 +231,13 @@ class AuthController : ViewModel() {
                     alamat = address,
                     ktpImageUrl = downloadUrl,
                     tglLahir = try {
-                        java.text.SimpleDateFormat("d/M/yyyy", java.util.Locale.getDefault()).parse(dateOfBirth)
-                    } catch (e: Exception) { null }
+                        java.text.SimpleDateFormat(
+                            "d/M/yyyy",
+                            java.util.Locale.getDefault()
+                        ).parse(dateOfBirth)
+                    } catch (e: Exception) {
+                        null
+                    }
                 )
                 db.collection("users").document(uid).set(newUser).await()
 
@@ -247,18 +268,21 @@ class AuthController : ViewModel() {
                 }
 
                 for (contact in allContactsToSave) {
-                    db.collection("emergency_contacts").document(contact.contactId).set(contact.copy(userId = uid)).await()
+                    db.collection("emergency_contacts").document(contact.contactId)
+                        .set(contact.copy(userId = uid)).await()
                 }
 
                 navController.navigate("pin_setup") { popUpTo("signup") { inclusive = true } }
             } catch (e: Exception) {
-                errorMessage = "Gagal Pendaftaran: ${e.localizedMessage}"
-                Log.e("RegisterError", e.toString())
+            errorMessage = formatRegistrationError(e.localizedMessage ?: "Terjadi kesalahan")
+            Log.e("RegisterError", e.toString())
             } finally {
                 isLoading = false
             }
         }
+
     }
+
 
     fun finalizeRegistration(navController: NavController) {
         viewModelScope.launch {

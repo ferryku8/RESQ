@@ -11,15 +11,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.LocalPolice
-import androidx.compose.material.icons.filled.MedicalServices
-import androidx.compose.material.icons.filled.Traffic
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.LocalPolice
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
@@ -32,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,6 +44,7 @@ import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.uxonauts.resq.models.KategoriLaporan
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -80,6 +83,10 @@ fun HomeScreen(
     var articles by remember { mutableStateOf<List<HomeArtikel>>(emptyList()) }
     var banners by remember { mutableStateOf<List<HomeBanner>>(emptyList()) }
 
+    // Ambil lebar layar untuk banner
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
+    val bannerWidth = screenWidthDp - 32.dp // minus horizontal padding
+
     LaunchedEffect(Unit) {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return@LaunchedEffect
         firestore.collection("users").document(uid).get()
@@ -110,6 +117,9 @@ fun HomeScreen(
                 }
             }
     }
+
+    // Ambil daftar kategori dari model untuk matching yang benar
+    val kategoriList = remember { KategoriLaporan.list }
 
     Scaffold(
         bottomBar = {
@@ -144,13 +154,12 @@ fun HomeScreen(
         ) {
             Spacer(Modifier.height(16.dp))
 
-            // Greeting
             Text("Halo,", fontSize = 14.sp, color = Color.Gray)
             Text(userName, fontSize = 22.sp, fontWeight = FontWeight.Bold)
 
             Spacer(Modifier.height(16.dp))
 
-            // Search bar + Riwayat icon + Notifikasi icon
+            // Search bar + Riwayat + Notifikasi
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = searchQuery,
@@ -190,21 +199,52 @@ fun HomeScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // FIX 1: Banner section — full width, tidak kepotong
+            // FIX 1: Banner — explicit width agar tidak hilang di LazyRow
             if (banners.isNotEmpty()) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(banners) { banner ->
-                        BannerCard(banner) {
-                            onArtikelDetailClick(banner.id)
+                        Card(
+                            modifier = Modifier
+                                .width(bannerWidth)
+                                .height(180.dp)
+                                .clickable { onArtikelDetailClick(banner.id) },
+                            shape = RoundedCornerShape(16.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                if (banner.gambarUrl.isNotEmpty()) {
+                                    Image(
+                                        painter = rememberAsyncImagePainter(banner.gambarUrl),
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(Color(0xFF0084FF)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            banner.judul,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp,
+                                            modifier = Modifier.padding(16.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
                 Spacer(Modifier.height(24.dp))
             }
 
-            // FIX 2: Layanan Laporan + "Lihat Semua"
+            // Layanan Laporan + Lihat Semua
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -217,48 +257,46 @@ fun HomeScreen(
             }
             Spacer(Modifier.height(8.dp))
 
+            // FIX 2 & 3: Icon & nama SAMA persis dengan LaporanKategoriScreen
+            // Ambil 4 kategori utama yang mau ditampilkan di home
+            val homeKategori = listOf(
+                kategoriList.find { it.id == "kejahatan" },
+                kategoriList.find { it.id == "lalulintas" },
+                kategoriList.find { it.id == "infrastruktur" }
+                    ?: kategoriList.find { it.id == "publik" }
+                    ?: kategoriList.getOrNull(2),
+                kategoriList.find { it.id == "keluhan" }
+                    ?: kategoriList.find { it.id == "bencana" }
+                    ?: kategoriList.getOrNull(3)
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                LaporanIconCard(
-                    label = "Kejahatan &\nKeamanan",
-                    icon = Icons.Default.LocalPolice,
-                    color = Color(0xFF1565C0),
-                    modifier = Modifier.weight(1f)
-                ) { onLaporanCategoryClick("Kejahatan & Keamanan") }
-
-                Spacer(Modifier.width(8.dp))
-
-                LaporanIconCard(
-                    label = "Kecelakaan\nLalu Lintas",
-                    icon = Icons.Default.Traffic,
-                    color = Color(0xFFE65100),
-                    modifier = Modifier.weight(1f)
-                ) { onLaporanCategoryClick("Kecelakaan Lalu Lintas") }
-
-                Spacer(Modifier.width(8.dp))
-
-                LaporanIconCard(
-                    label = "Infrastruktur\n& Lingkungan",
-                    icon = Icons.Default.LocalFireDepartment,
-                    color = Color(0xFF2E7D32),
-                    modifier = Modifier.weight(1f)
-                ) { onLaporanCategoryClick("Infrastruktur & Lingkungan") }
-
-                Spacer(Modifier.width(8.dp))
-
-                LaporanIconCard(
-                    label = "Layanan\nPublik",
-                    icon = Icons.Default.MedicalServices,
-                    color = Color(0xFF6A1B9A),
-                    modifier = Modifier.weight(1f)
-                ) { onLaporanCategoryClick("Layanan Publik") }
+                homeKategori.forEachIndexed { index, kat ->
+                    if (kat != null) {
+                        LaporanIconCard(
+                            label = kat.nama,
+                            icon = iconForKategori(kat.id),
+                            color = colorForIndex(index),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            // Pass nama PERSIS dari model — pasti match
+                            onLaporanCategoryClick(kat.nama)
+                        }
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                    if (index < homeKategori.size - 1) {
+                        Spacer(Modifier.width(8.dp))
+                    }
+                }
             }
 
             Spacer(Modifier.height(24.dp))
 
-            // Artikel section
+            // Artikel
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -291,7 +329,6 @@ fun HomeScreen(
                     )
                 }
             } else {
-                // FIX 3: Artikel cards ukuran sama
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -308,42 +345,27 @@ fun HomeScreen(
     }
 }
 
-// FIX 1: Banner card — aspect ratio 16:9, tidak kepotong
-@Composable
-private fun BannerCard(banner: HomeBanner, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(16f / 9f)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (banner.gambarUrl.isNotEmpty()) {
-                Image(
-                    painter = rememberAsyncImagePainter(banner.gambarUrl),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(0xFF0084FF)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        banner.judul,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
-            }
-        }
+// Icon mapping — SAMA PERSIS dengan LaporanKategoriScreen
+private fun iconForKategori(id: String): ImageVector {
+    return when (id) {
+        "kejahatan" -> Icons.Default.LocalPolice
+        "lalulintas" -> Icons.Default.DirectionsCar
+        "publik" -> Icons.Default.Business
+        "siber" -> Icons.Default.Computer
+        "bencana" -> Icons.Default.Cloud
+        "keluhan" -> Icons.Default.Description
+        "infrastruktur" -> Icons.Default.Cloud  // fallback
+        else -> Icons.Default.Description
+    }
+}
+
+private fun colorForIndex(index: Int): Color {
+    return when (index) {
+        0 -> Color(0xFF1565C0)
+        1 -> Color(0xFFE65100)
+        2 -> Color(0xFF2E7D32)
+        3 -> Color(0xFF6A1B9A)
+        else -> Color.Gray
     }
 }
 
@@ -385,7 +407,6 @@ private fun LaporanIconCard(
     }
 }
 
-// FIX 3: Artikel card — fixed height supaya ukuran seragam
 @Composable
 private fun HomeArtikelCard(artikel: HomeArtikel, onClick: () -> Unit) {
     val dateText = artikel.tglPublish?.toDate()?.let {
@@ -402,7 +423,6 @@ private fun HomeArtikelCard(artikel: HomeArtikel, onClick: () -> Unit) {
         shape = RoundedCornerShape(12.dp)
     ) {
         Column {
-            // Gambar — fixed height
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -427,7 +447,6 @@ private fun HomeArtikelCard(artikel: HomeArtikel, onClick: () -> Unit) {
                 }
             }
 
-            // Konten — mengisi sisa ruang
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -465,7 +484,6 @@ private fun HomeArtikelCard(artikel: HomeArtikel, onClick: () -> Unit) {
     }
 }
 
-// FIX 4: Bottom bar — icon Home dan Profile yang benar
 @Composable
 fun HomeBottomBar(
     onHomeClick: () -> Unit = {},
@@ -488,9 +506,7 @@ fun HomeBottomBar(
             IconButton(onClick = onHomeClick) {
                 Icon(
                     imageVector = if (selectedTab == "home")
-                        androidx.compose.material.icons.Icons.Filled.Home
-                    else
-                        androidx.compose.material.icons.Icons.Outlined.Home,
+                        Icons.Filled.Home else Icons.Outlined.Home,
                     contentDescription = "Home",
                     tint = Color(0xFF0084FF),
                     modifier = Modifier.size(32.dp)
@@ -502,9 +518,7 @@ fun HomeBottomBar(
             IconButton(onClick = onProfileClick) {
                 Icon(
                     imageVector = if (selectedTab == "profile")
-                        androidx.compose.material.icons.Icons.Filled.Person
-                    else
-                        Icons.Outlined.Person,
+                        Icons.Filled.Person else Icons.Outlined.Person,
                     contentDescription = "Profile",
                     tint = Color(0xFF0084FF),
                     modifier = Modifier.size(32.dp)

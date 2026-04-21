@@ -62,6 +62,11 @@ data class UserProfile(
 
 data class SosCategory(val name: String, val icon: ImageVector)
 
+data class RespondingPetugas(
+    val uid: String, val name: String, val role: Int,
+    val lat: Double, val lng: Double, val status: String
+)
+
 private fun notifyEmergencyContacts(
     firestore: FirebaseFirestore,
     senderUserId: String,
@@ -206,13 +211,9 @@ fun SosSystemFlow(
     var allergies by remember { mutableStateOf("-") }
     var medicalHistory by remember { mutableStateOf("-") }
 
-    var petugasName by remember { mutableStateOf("") }
-    var petugasRole by remember { mutableStateOf(0) }
-    var petugasLat by remember { mutableStateOf(0.0) }
-    var petugasLng by remember { mutableStateOf(0.0) }
+    var respondingList by remember { mutableStateOf<List<RespondingPetugas>>(emptyList()) }
     var alertStatus by remember { mutableStateOf("active") }
 
-    // FETCH PROFIL USER (NAMA + INFO MEDIS) — INI YANG HILANG SEBELUMNYA
     LaunchedEffect(userId) {
         if (userId.isNotEmpty()) {
             firestore.collection("users").document(userId).get()
@@ -249,7 +250,6 @@ fun SosSystemFlow(
         }
     }
 
-    // Listen update dokumen sos_alerts yang aktif (untuk tracking petugas + auto-back saat completed)
     LaunchedEffect(currentAlertId) {
         if (currentAlertId.isNotEmpty()) {
             firestore.collection("sos_alerts").document(currentAlertId)
@@ -257,18 +257,24 @@ fun SosSystemFlow(
                     if (error != null || snapshot == null || !snapshot.exists()) return@addSnapshotListener
 
                     alertStatus = snapshot.getString("status") ?: "active"
-                    petugasName = snapshot.getString("acceptedByName") ?: ""
-                    petugasRole = (snapshot.getLong("acceptedByRole") ?: 0L).toInt()
-                    petugasLat = snapshot.getDouble("petugasLat") ?: 0.0
-                    petugasLng = snapshot.getDouble("petugasLng") ?: 0.0
 
-                    // Auto kembali ke home saat status completed
+                    @Suppress("UNCHECKED_CAST")
+                    val respMap = snapshot.get("respondingPetugas") as? Map<String, Map<String, Any>>
+                    if (respMap != null) {
+                        respondingList = respMap.map { (uid, data) ->
+                            RespondingPetugas(
+                                uid = uid,
+                                name = (data["name"] as? String) ?: "Petugas",
+                                role = ((data["role"] as? Long) ?: 2L).toInt(),
+                                lat = (data["lat"] as? Double) ?: 0.0,
+                                lng = (data["lng"] as? Double) ?: 0.0,
+                                status = (data["status"] as? String) ?: "on_the_way"
+                            )
+                        }
+                    }
+
                     if (alertStatus == "completed") {
-                        Toast.makeText(
-                            context,
-                            "Laporan SOS telah diselesaikan oleh petugas",
-                            Toast.LENGTH_LONG
-                        ).show()
+                        Toast.makeText(context, "Laporan SOS telah diselesaikan", Toast.LENGTH_LONG).show()
                         kotlinx.coroutines.GlobalScope.launch {
                             kotlinx.coroutines.delay(2000)
                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -352,12 +358,9 @@ fun SosSystemFlow(
                                                                 "allergies" to allergies,
                                                                 "medicalHistory" to medicalHistory
                                                             ),
-                                                            "acceptedBy" to "",
-                                                            "acceptedByName" to "",
-                                                            "acceptedByRole" to 0,
-                                                            "petugasLat" to 0.0,
-                                                            "petugasLng" to 0.0
+                                                            "respondingPetugas" to emptyMap<String, Any>()
                                                         )
+
                                                         firestore.collection("sos_alerts").add(sosData)
                                                             .addOnSuccessListener { docRef ->
                                                                 currentAlertId = docRef.id
@@ -413,10 +416,7 @@ fun SosSystemFlow(
                     latitude = userLat,
                     longitude = userLng,
                     userProfile = currentUserData,
-                    petugasLat = petugasLat,
-                    petugasLng = petugasLng,
-                    petugasName = petugasName.ifEmpty { "Menunggu petugas..." },
-                    petugasRole = petugasRole,
+                    respondingPetugas = respondingList,
                     alertStatus = alertStatus,
                     onBackClick = {
                         currentStep = SosStep.CATEGORIES
@@ -543,50 +543,27 @@ fun SosMapScreen(
     latitude: Double,
     longitude: Double,
     userProfile: UserProfile,
-    petugasLat: Double = 0.0,
-    petugasLng: Double = 0.0,
-    petugasName: String = "Menunggu petugas...",
-    petugasRole: Int = 0,
+    respondingPetugas: List<RespondingPetugas> = emptyList(),
     alertStatus: String = "active",
     onBackClick: () -> Unit
 ) {
     val currentTime = SimpleDateFormat("HH:mm 'WIB'", Locale("id", "ID")).format(Date())
-    val roleText = when (petugasRole) {
-        2 -> "Polisi"
-        3 -> "Medis/Ambulans"
-        4 -> "Damkar"
-        else -> "Petugas"
-    }
     val statusText = when (alertStatus) {
         "active" -> "Menunggu petugas..."
-        "accepted" -> "Petugas sedang menuju lokasi"
-        "on_the_way" -> "Petugas dalam perjalanan"
+        "accepted" -> "${respondingPetugas.size} petugas merespons"
         "arrived" -> "Petugas telah tiba"
         "completed" -> "Selesai ditangani"
         else -> "Aktif"
     }
 
-    var route by remember { mutableStateOf<com.uxonauts.resq.utils.RouteResult?>(null) }
     var hasCenteredMap by remember { mutableStateOf(false) }
-
-    LaunchedEffect(petugasLat, petugasLng) {
-        if (petugasLat != 0.0 && petugasLng != 0.0 && latitude != 0.0) {
-            val r = com.uxonauts.resq.utils.RoutingHelper.getRoute(
-                petugasLat, petugasLng, latitude, longitude
-            )
-            if (r != null) route = r
-        }
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
-                Configuration.getInstance().load(
-                    ctx, PreferenceManager.getDefaultSharedPreferences(ctx)
-                )
+                Configuration.getInstance().load(ctx, PreferenceManager.getDefaultSharedPreferences(ctx))
                 Configuration.getInstance().userAgentValue = ctx.packageName
-
                 MapView(ctx).apply {
                     setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
@@ -597,6 +574,7 @@ fun SosMapScreen(
             update = { mv ->
                 mv.overlays.clear()
 
+                // Marker user (merah)
                 val userMarker = Marker(mv)
                 userMarker.position = GeoPoint(latitude, longitude)
                 userMarker.title = "Lokasi Anda"
@@ -606,173 +584,176 @@ fun SosMapScreen(
                 userMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                 mv.overlays.add(userMarker)
 
-                if (petugasLat != 0.0 && petugasLng != 0.0) {
-                    val petugasMarker = Marker(mv)
-                    petugasMarker.position = GeoPoint(petugasLat, petugasLng)
-                    petugasMarker.title = "Petugas: $petugasName"
-                    petugasMarker.icon = com.uxonauts.resq.utils.MapHelpers.createDotMarker(
-                        mv.context, android.graphics.Color.parseColor("#0084FF")
-                    )
-                    petugasMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                    mv.overlays.add(petugasMarker)
-                }
-
-                route?.let { r ->
-                    if (r.points.isNotEmpty()) {
-                        val shadowLine = org.osmdroid.views.overlay.Polyline()
-                        shadowLine.setPoints(r.points)
-                        shadowLine.outlinePaint.color =
-                            android.graphics.Color.parseColor("#33000000")
-                        shadowLine.outlinePaint.strokeWidth = 22f
-                        shadowLine.outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
-                        shadowLine.outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
-                        mv.overlays.add(shadowLine)
-
-                        val mainLine = org.osmdroid.views.overlay.Polyline()
-                        mainLine.setPoints(r.points)
-                        mainLine.outlinePaint.color =
-                            android.graphics.Color.parseColor("#0084FF")
-                        mainLine.outlinePaint.strokeWidth = 14f
-                        mainLine.outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
-                        mainLine.outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
-                        mv.overlays.add(mainLine)
+                // Marker SEMUA petugas — warna berdasarkan role
+                respondingPetugas.forEach { p ->
+                    if (p.lat != 0.0 && p.lng != 0.0) {
+                        val color = when (p.role) {
+                            2 -> "#0084FF"
+                            3 -> "#4CAF50"
+                            4 -> "#FF9800"
+                            else -> "#9C27B0"
+                        }
+                        val marker = Marker(mv)
+                        marker.position = GeoPoint(p.lat, p.lng)
+                        marker.title = "${petugasRoleLabel(p.role)}: ${p.name}"
+                        marker.icon = com.uxonauts.resq.utils.MapHelpers.createDotMarker(
+                            mv.context, android.graphics.Color.parseColor(color)
+                        )
+                        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                        mv.overlays.add(marker)
                     }
                 }
 
-                if (!hasCenteredMap && petugasLat != 0.0) {
-                    val centerLat = (latitude + petugasLat) / 2
-                    val centerLng = (longitude + petugasLng) / 2
-                    mv.controller.setCenter(GeoPoint(centerLat, centerLng))
-                    mv.controller.setZoom(14.5)
+                // Center map to show all markers
+                if (!hasCenteredMap && respondingPetugas.any { it.lat != 0.0 }) {
+                    val allLats = listOf(latitude) + respondingPetugas.map { it.lat }
+                    val allLngs = listOf(longitude) + respondingPetugas.map { it.lng }
+                    val cLat = allLats.average()
+                    val cLng = allLngs.average()
+                    mv.controller.setCenter(GeoPoint(cLat, cLng))
+                    mv.controller.setZoom(14.0)
                     hasCenteredMap = true
                 }
-
                 mv.invalidate()
             }
         )
 
+        // Back button
         IconButton(
             onClick = onBackClick,
-            modifier = Modifier
-                .padding(top = 40.dp, start = 16.dp)
-                .background(Color.White, CircleShape)
-                .size(48.dp)
+            modifier = Modifier.padding(top = 40.dp, start = 16.dp).background(Color.White, CircleShape).size(48.dp)
         ) {
-            Icon(Icons.Default.ArrowBack, contentDescription = "Kembali", tint = Color.Black)
+            Icon(Icons.Default.ArrowBack, "Kembali", tint = Color.Black)
         }
 
+        // Status badge
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 100.dp)
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 100.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.LocationOn, contentDescription = null,
-                    tint = Color.Red, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(statusText, fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold, color = Color.Black)
+            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.LocationOn, null, tint = Color.Red, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(statusText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
 
+        // Bottom card
         Card(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             elevation = CardDefaults.cardElevation(defaultElevation = 24.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    ImagePlaceholder()
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(petugasName, fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold, color = Color.Black)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.LocalPolice, contentDescription = null,
-                                tint = Color(0xFF4CAF50), modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(roleText, fontSize = 12.sp, color = Color.DarkGray)
+                // Daftar petugas yang merespons
+                // Di dalam bottom card, ganti bagian daftar petugas:
+                if (respondingPetugas.isEmpty()) {
+                    Text("Menunggu petugas merespons...", fontSize = 14.sp, color = Color.Gray)
+                } else {
+                    Text("Petugas yang Merespons (${respondingPetugas.size})",
+                        fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    respondingPetugas.forEach { p ->
+                        val roleColor = when (p.role) {
+                            2 -> Color(0xFF0084FF); 3 -> Color(0xFF4CAF50)
+                            4 -> Color(0xFFFF9800); else -> Color.Gray
                         }
-                    }
+                        val pStatusLabel = when (p.status) {
+                            "on_the_way" -> "Menuju lokasi"
+                            "arrived" -> "Sudah tiba"
+                            "completed" -> "Selesai"
+                            else -> p.status
+                        }
 
-                    if (alertStatus != "active") {
-                        Icon(Icons.Default.Call, contentDescription = "Telepon",
-                            tint = Color(0xFF0084FF),
-                            modifier = Modifier.size(28.dp).clickable { })
+                        // Hitung jarak per petugas
+                        val distText = if (p.lat != 0.0 && latitude != 0.0) {
+                            val dist = haversineDistance(p.lat, p.lng, latitude, longitude)
+                            if (dist < 1000) "${dist.toInt()} m"
+                            else String.format("%.1f km", dist / 1000)
+                        } else ""
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                                .background(roleColor.copy(alpha = 0.08f), RoundedCornerShape(10.dp))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(Modifier.size(10.dp).clip(CircleShape).background(roleColor))
+                            Spacer(Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(petugasRoleLabel(p.role), fontSize = 12.sp,
+                                        color = roleColor, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(p.name, fontSize = 12.sp)
+                                }
+                                Row {
+                                    Text(pStatusLabel, fontSize = 11.sp, color = Color.Gray)
+                                    if (distText.isNotEmpty() && p.status != "completed") {
+                                        Text(" • $distText", fontSize = 11.sp, color = Color.Gray)
+                                    }
+                                }
+                            }
+                            // Status badge
+                            val badgeColor = when (p.status) {
+                                "arrived" -> Color(0xFF2196F3)
+                                "completed" -> Color(0xFF4CAF50)
+                                else -> Color.Gray
+                            }
+                            Box(
+                                modifier = Modifier.clip(RoundedCornerShape(6.dp))
+                                    .background(badgeColor.copy(alpha = 0.15f))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    when (p.status) {
+                                        "on_the_way" -> "Menuju"
+                                        "arrived" -> "Tiba"
+                                        "completed" -> "Selesai"
+                                        else -> p.status
+                                    },
+                                    fontSize = 10.sp, color = badgeColor, fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                if (route != null) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFFF0F8FF), RoundedCornerShape(12.dp))
-                            .padding(16.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Jarak Petugas", fontSize = 11.sp, color = Color.Gray)
-                            Text(
-                                com.uxonauts.resq.utils.RoutingHelper.formatDistance(
-                                    route!!.distanceMeters
-                                ),
-                                fontSize = 20.sp, fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Estimasi Tiba", fontSize = 11.sp, color = Color.Gray)
-                            Text(
-                                com.uxonauts.resq.utils.RoutingHelper.formatDuration(
-                                    route!!.durationSeconds
-                                ),
-                                fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                                color = Color(0xFF0084FF)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-
+                Spacer(Modifier.height(16.dp))
                 Text("$category - $currentTime", fontSize = 18.sp,
                     fontWeight = FontWeight.Bold, color = Color(0xFFF44336))
-                Spacer(modifier = Modifier.height(4.dp))
-
+                Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Default.LocationOn, contentDescription = null,
-                        tint = Color.Gray, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(Icons.Default.LocationOn, null, tint = Color.Gray, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
                     Text(location, fontSize = 14.sp, color = Color.DarkGray, lineHeight = 18.sp)
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = Color(0xFFEEEEEE), thickness = 1.dp)
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text("Info Korban: ${userProfile.name}",
-                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.Black)
-                Spacer(modifier = Modifier.height(4.dp))
-
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(color = Color(0xFFEEEEEE))
+                Spacer(Modifier.height(12.dp))
+                Text("Info Korban: ${userProfile.name}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
                 MedicalInfoRow("Golongan Darah", userProfile.bloodType)
                 MedicalInfoRow("Alergi", userProfile.allergies)
                 MedicalInfoRow("Riwayat Penyakit", userProfile.medicalHistory)
-
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
             }
         }
     }
+}
+private fun haversineDistance(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
+    val r = 6371000.0 // radius bumi dalam meter
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLng = Math.toRadians(lng2 - lng1)
+    val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2)
+    val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return r * c
 }
 
 @Composable
@@ -798,4 +779,8 @@ fun ImagePlaceholder() {
         Icon(Icons.Default.LocalPolice, contentDescription = null,
             tint = Color.Gray, modifier = Modifier.size(36.dp))
     }
+}
+
+private fun petugasRoleLabel(role: Int): String = when (role) {
+    2 -> "Polisi"; 3 -> "Medis"; 4 -> "Damkar"; else -> "Petugas"
 }

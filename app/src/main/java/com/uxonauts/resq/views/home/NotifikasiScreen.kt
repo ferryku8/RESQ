@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.sp
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import androidx.navigation.NavController
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -31,7 +30,8 @@ data class NotifItem(
     val title: String,
     val date: String,
     val body: String,
-    val type: String // "sos_contact" atau "report_update"
+    val type: String,
+    val sortTimestamp: Long = 0L
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,16 +41,20 @@ fun NotifikasiScreen(navController: NavController) {
     val firestore = remember { FirebaseFirestore.getInstance() }
     var notifs by remember { mutableStateOf<List<NotifItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
-    val dateFormat = remember { SimpleDateFormat("d MMMM yyyy - HH.mm 'WIB'", Locale("id", "ID")) }
+    val dateFormat = remember {
+        SimpleDateFormat("d MMMM yyyy - HH.mm 'WIB'", Locale("id", "ID"))
+    }
 
     LaunchedEffect(uid) {
-        if (uid.isEmpty()) return@LaunchedEffect
+        if (uid.isEmpty()) {
+            loading = false
+            return@LaunchedEffect
+        }
         val allNotifs = mutableListOf<NotifItem>()
 
-        // 1. Notifikasi SOS dari kontak darurat
+        // 1. Notifikasi SOS dari kontak darurat — TANPA orderBy
         firestore.collection("emergency_notifications")
             .whereEqualTo("targetUserId", uid)
-            .orderBy("timestamp", Query.Direction.DESCENDING)
             .get()
             .addOnSuccessListener { snap ->
                 for (doc in snap.documents) {
@@ -64,15 +68,15 @@ fun NotifikasiScreen(navController: NavController) {
                             title = "Peringatan SOS: $senderName Butuh Bantuan",
                             date = dateStr,
                             body = "$senderName telah mengaktifkan SOS Darurat ($category). Segera buka RESQ untuk melihat lokasi dan statusnya.",
-                            type = "sos_contact"
+                            type = "sos_contact",
+                            sortTimestamp = ts?.seconds ?: 0L
                         )
                     )
                 }
 
-                // 2. Update progress laporan milik user ini
+                // 2. Update progress laporan milik user — TANPA orderBy
                 firestore.collection("reports")
                     .whereEqualTo("userId", uid)
-                    .orderBy("tanggalLapor", Query.Direction.DESCENDING)
                     .get()
                     .addOnSuccessListener { reportSnap ->
                         for (doc in reportSnap.documents) {
@@ -83,56 +87,68 @@ fun NotifikasiScreen(navController: NavController) {
                             val nomorLaporan = "RESQ-${reportId.take(8).uppercase()}"
 
                             @Suppress("UNCHECKED_CAST")
-                            val progressNotes = (doc.get("progressNotes") as? List<Map<String, Any>>) ?: emptyList()
+                            val progressNotes =
+                                (doc.get("progressNotes") as? List<Map<String, Any>>)
+                                    ?: emptyList()
 
-                            // Notif untuk status terima
+                            // Notif untuk status diterima
                             if (status != "Menunggu") {
                                 val tanggalLapor = doc.getTimestamp("tanggalLapor")
-                                val dateStr = tanggalLapor?.toDate()?.let { dateFormat.format(it) } ?: ""
+                                val dateStr =
+                                    tanggalLapor?.toDate()?.let { dateFormat.format(it) } ?: ""
                                 allNotifs.add(
                                     NotifItem(
                                         id = "${reportId}_accepted",
                                         title = "Laporan $subJenis Diterima",
                                         date = dateStr,
                                         body = "Laporan Anda $nomorLaporan telah kami terima. Anda bisa cek progressnya di Riwayat Laporan.",
-                                        type = "report_update"
+                                        type = "report_update",
+                                        sortTimestamp = tanggalLapor?.seconds ?: 0L
                                     )
                                 )
                             }
 
-                            // Notif untuk setiap progress update (kecuali yang pertama "diterima")
+                            // Notif untuk setiap progress update
                             progressNotes.forEachIndexed { index, note ->
                                 if (index > 0) {
                                     val noteText = note["note"] as? String ?: ""
-                                    val stage = note["stage"] as? String ?: ""
                                     val ts = note["timestamp"] as? Timestamp
-                                    val dateStr = ts?.toDate()?.let { dateFormat.format(it) } ?: ""
+                                    val dateStr =
+                                        ts?.toDate()?.let { dateFormat.format(it) } ?: ""
                                     allNotifs.add(
                                         NotifItem(
                                             id = "${reportId}_progress_$index",
                                             title = "Update Laporan $nomorLaporan",
                                             date = dateStr,
                                             body = "Laporan Anda mengenai \"$judulLaporan\" kini statusnya: $noteText",
-                                            type = "report_update"
+                                            type = "report_update",
+                                            sortTimestamp = ts?.seconds ?: 0L
                                         )
                                     )
                                 }
                             }
                         }
 
-                        // Sort semua by date string (newest first) — ini simplified, idealnya pakai Timestamp
-                        notifs = allNotifs
+                        // Sort terbaru dulu
+                        notifs = allNotifs.sortedByDescending { it.sortTimestamp }
                         loading = false
                     }
-                    .addOnFailureListener { loading = false }
+                    .addOnFailureListener {
+                        notifs = allNotifs.sortedByDescending { it.sortTimestamp }
+                        loading = false
+                    }
             }
-            .addOnFailureListener { loading = false }
+            .addOnFailureListener {
+                loading = false
+            }
     }
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Notifikasi", fontWeight = FontWeight.Bold, fontSize = 22.sp) },
+                title = {
+                    Text("Notifikasi", fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, "Kembali")
@@ -146,11 +162,21 @@ fun NotifikasiScreen(navController: NavController) {
         containerColor = Color(0xFFFBFBFB)
     ) { padding ->
         if (loading) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
                 CircularProgressIndicator(color = Color(0xFF0084FF))
             }
         } else if (notifs.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
                 Text("Belum ada notifikasi", color = Color.Gray)
             }
         } else {
@@ -193,10 +219,15 @@ private fun NotifCard(notif: NotifItem) {
                 contentAlignment = Alignment.Center
             ) {
                 if (isSos) {
-                    Text("SOS", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(
+                        "SOS", color = Color.White,
+                        fontWeight = FontWeight.Bold, fontSize = 14.sp
+                    )
                 } else {
-                    Icon(Icons.Default.Shield, null, tint = Color.White,
-                        modifier = Modifier.size(28.dp))
+                    Icon(
+                        Icons.Default.Shield, null, tint = Color.White,
+                        modifier = Modifier.size(28.dp)
+                    )
                 }
             }
             Spacer(Modifier.width(12.dp))

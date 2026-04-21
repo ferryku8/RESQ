@@ -27,6 +27,7 @@ import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
+import androidx.compose.ui.text.style.TextAlign
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -200,28 +201,75 @@ fun ProgressLaporanScreen(navController: NavController, reportId: String) {
     }
 }
 
-@Composable private fun ProgressStepperUser(currentStatus: String) {
+@Composable
+private fun ProgressStepperUser(currentStatus: String) {
     val idx = when (currentStatus) {
-        "Diterima" -> 0; "Diverifikasi" -> 1; "Ditindaklanjuti", "Diproses", "Sedang Diproses" -> 2; "Selesai" -> 3; else -> -1
+        "Diterima" -> 0
+        "Diverifikasi" -> 1
+        "Ditindaklanjuti", "Diproses", "Sedang Diproses" -> 2
+        "Selesai" -> 3
+        else -> -1
     }
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        USER_STAGES.forEachIndexed { i, s ->
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        USER_STAGES.forEachIndexed { i, stage ->
             val active = i <= idx
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f, false)) {
-                Box(Modifier.size(36.dp).clip(CircleShape).background(if (active) Color(0xFF0084FF) else Color(0xFFB3D9FF).copy(alpha = 0.5f)),
-                    contentAlignment = Alignment.Center) {
-                    Text("${i + 1}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+
+            // Kolom untuk circle + label
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.width(72.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (active) Color(0xFF0084FF)
+                            else Color(0xFFB3D9FF).copy(alpha = 0.5f)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "${i + 1}",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
                 }
-                Spacer(Modifier.height(4.dp))
-                Text(s, fontSize = 10.sp, color = if (active) Color(0xFF0084FF) else Color.Gray, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stage,
+                    fontSize = 11.sp,
+                    color = if (active) Color(0xFF0084FF) else Color.Gray,
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 14.sp,
+                    maxLines = 2
+                )
             }
+
+            // Garis penghubung antar circle
             if (i < USER_STAGES.size - 1) {
-                Box(Modifier.weight(1f).height(2.dp).padding(bottom = 16.dp).background(if (i < idx) Color(0xFF0084FF) else Color(0xFFB3D9FF).copy(alpha = 0.5f)))
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(3.dp)
+                        .padding(top = 20.dp)
+                        .background(
+                            if (i < idx) Color(0xFF0084FF)
+                            else Color(0xFFB3D9FF).copy(alpha = 0.5f)
+                        )
+                )
             }
         }
     }
 }
-
 @Composable private fun SectionTitle(t: String) { Text(t, fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 10.dp)) }
 @Composable private fun KVRow(l: String, v: String) { Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) { Text(l, Modifier.width(140.dp), fontSize = 13.sp); Text(":", fontSize = 13.sp); Spacer(Modifier.width(8.dp)); Text(v, fontSize = 13.sp, modifier = Modifier.weight(1f)) } }
 @Composable private fun KVRowML(l: String, v: String) { Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.Top) { Text(l, Modifier.width(140.dp), fontSize = 13.sp); Text(":", fontSize = 13.sp); Spacer(Modifier.width(8.dp)); Text(v, fontSize = 13.sp, modifier = Modifier.weight(1f)) } }

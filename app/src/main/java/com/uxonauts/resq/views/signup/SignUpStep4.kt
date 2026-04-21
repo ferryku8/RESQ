@@ -19,6 +19,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -36,22 +37,28 @@ import com.uxonauts.resq.views.ui.theme.*
 fun SignUpStep4(controller: AuthController, navController: NavController) {
     var expandedRelation by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    var contactError by remember { mutableStateOf<String?>(null) }
 
-    val contactLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
+    val contactLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickContact()
+    ) { uri ->
         uri?.let {
             try {
                 val cursor = context.contentResolver.query(it, null, null, null, null)
                 if (cursor != null && cursor.moveToFirst()) {
-                    val nameIndex = cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
+                    val nameIndex =
+                        cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME)
                     if (nameIndex != -1) {
                         val name = cursor.getString(nameIndex)
                         val nameParts = name.split(" ")
                         controller.ecFirstName = nameParts.firstOrNull() ?: ""
-                        controller.ecLastName = if (nameParts.size > 1) nameParts.drop(1).joinToString(" ") else ""
+                        controller.ecLastName =
+                            if (nameParts.size > 1) nameParts.drop(1).joinToString(" ") else ""
                     }
 
                     val idIndex = cursor.getColumnIndex(ContactsContract.Contacts._ID)
-                    val hasPhoneIndex = cursor.getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER)
+                    val hasPhoneIndex =
+                        cursor.getColumnIndex(ContactsContract.Contacts.HAS_PHONE_NUMBER)
 
                     if (idIndex != -1 && hasPhoneIndex != -1) {
                         val contactId = cursor.getString(idIndex)
@@ -66,70 +73,174 @@ fun SignUpStep4(controller: AuthController, navController: NavController) {
                                 null
                             )
                             if (phoneCursor != null && phoneCursor.moveToFirst()) {
-                                val phoneIndex = phoneCursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                                val phoneIndex = phoneCursor.getColumnIndex(
+                                    ContactsContract.CommonDataKinds.Phone.NUMBER
+                                )
                                 if (phoneIndex != -1) {
-                                    controller.ecPhone = phoneCursor.getString(phoneIndex).replace(" ", "").replace("-", "")
+                                    controller.ecPhone = phoneCursor.getString(phoneIndex)
+                                        .replace(" ", "").replace("-", "")
                                 }
                                 phoneCursor.close()
                             }
                         }
                     }
+                    contactError = null
                     Toast.makeText(context, "Kontak berhasil dimuat", Toast.LENGTH_SHORT).show()
                 }
                 cursor?.close()
             } catch (e: Exception) {
-                Toast.makeText(context, "Gagal memuat kontak. Pastikan izin diberikan.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context, "Gagal memuat kontak. Pastikan izin diberikan.",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
         if (isGranted) {
             contactLauncher.launch(null)
         } else {
-            Toast.makeText(context, "Izin kontak diperlukan untuk fitur ini", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context, "Izin kontak diperlukan untuk fitur ini",
+                Toast.LENGTH_SHORT
+            ).show()
         }
+    }
+
+    fun validateAndAddContact() {
+        contactError = null
+        controller.errorMessage = null
+
+        if (controller.ecFirstName.isBlank()) {
+            contactError = "Nama depan kontak darurat wajib diisi"
+            return
+        }
+        if (controller.ecPhone.isBlank()) {
+            contactError = "Nomor telepon kontak darurat wajib diisi"
+            return
+        }
+        if (controller.ecPhone.length < 10) {
+            contactError = "Nomor telepon kontak minimal 10 digit"
+            return
+        }
+        if (controller.isSelfNumber()) {
+            contactError = "Tidak boleh menggunakan nomor telepon Anda sendiri sebagai kontak darurat"
+            return
+        }
+        // Cek duplikat
+        val existingNumbers = controller.savedContacts.map {
+            it.noTelepon.replace(Regex("[^0-9]"), "")
+        }
+        val newNumber = controller.ecPhone.replace(Regex("[^0-9]"), "")
+        if (existingNumbers.contains(newNumber)) {
+            contactError = "Nomor telepon ini sudah ditambahkan sebelumnya"
+            return
+        }
+
+        controller.addEmergencyContact()
     }
 
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
-            Text("Kontak Darurat", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+            Text(
+                "Kontak Darurat",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Tambahkan orang yang dapat dihubungi (Tidak Wajib).", textAlign = TextAlign.Center, color = TextGray, fontSize = 12.sp, modifier = Modifier.fillMaxWidth())
+            Text(
+                "Tambahkan orang yang dapat dihubungi saat keadaan darurat (Tidak Wajib).",
+                textAlign = TextAlign.Center,
+                color = TextGray,
+                fontSize = 12.sp,
+                modifier = Modifier.fillMaxWidth()
+            )
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Tampilkan Error (Misal: Nomor sendiri)
+            // Error dari Firebase (saat submit)
             controller.errorMessage?.let {
-                Text(text = it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = it,
+                        color = Color(0xFFD32F2F),
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(12.dp),
+                        lineHeight = 18.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            // Error validasi kontak
+            if (contactError != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = contactError!!,
+                        color = Color(0xFFE65100),
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(12.dp),
+                        lineHeight = 18.sp
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
             OutlinedButton(
                 onClick = {
                     val hasPermission = ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.READ_CONTACTS
+                        context, Manifest.permission.READ_CONTACTS
                     ) == PackageManager.PERMISSION_GRANTED
 
-                    if (hasPermission) {
-                        contactLauncher.launch(null)
-                    } else {
-                        permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
-                    }
+                    if (hasPermission) contactLauncher.launch(null)
+                    else permissionLauncher.launch(Manifest.permission.READ_CONTACTS)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(8.dp)
             ) {
-                Icon(Icons.Default.Contacts, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(
+                    Icons.Default.Contacts, contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Pilih dari Buku Telepon")
             }
             Spacer(modifier = Modifier.height(16.dp))
 
             Text("Nama Lengkap", fontWeight = FontWeight.Medium)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = controller.ecFirstName, onValueChange = { controller.ecFirstName = it }, modifier = Modifier.weight(1f), placeholder = { Text("Nama Depan") })
-                OutlinedTextField(value = controller.ecLastName, onValueChange = { controller.ecLastName = it }, modifier = Modifier.weight(1f), placeholder = { Text("Nama Belakang") })
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = controller.ecFirstName,
+                    onValueChange = {
+                        controller.ecFirstName = it
+                        contactError = null
+                    },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Nama Depan") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = controller.ecLastName,
+                    onValueChange = { controller.ecLastName = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Nama Belakang") },
+                    singleLine = true
+                )
             }
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -143,8 +254,12 @@ fun SignUpStep4(controller: AuthController, navController: NavController) {
                     onValueChange = {},
                     readOnly = true,
                     label = { Text("Hubungan") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRelation) },
-                    modifier = Modifier.menuAnchor().fillMaxWidth()
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedRelation)
+                    },
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
                 )
                 ExposedDropdownMenu(
                     expanded = expandedRelation,
@@ -163,18 +278,25 @@ fun SignUpStep4(controller: AuthController, navController: NavController) {
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            OutlinedTextField(value = controller.ecPhone, onValueChange = { controller.ecPhone = it }, label = { Text("Nomor Telepon") }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+            OutlinedTextField(
+                value = controller.ecPhone,
+                onValueChange = {
+                    controller.ecPhone = it
+                    contactError = null
+                },
+                label = { Text("Nomor Telepon") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                singleLine = true
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                TextButton(
-                    onClick = { controller.addEmergencyContact() },
-                    enabled = controller.isStep4ContactValid()
-                ) {
+                TextButton(onClick = { validateAndAddContact() }) {
                     Text(
                         "+ Tambahkan ke Daftar",
-                        color = if(controller.isStep4ContactValid()) ResqBlue else TextGray,
+                        color = if (controller.isStep4ContactValid()) ResqBlue else TextGray,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -185,19 +307,33 @@ fun SignUpStep4(controller: AuthController, navController: NavController) {
 
         if (controller.savedContacts.isNotEmpty()) {
             item {
-                Text("Daftar Kontak Tersimpan:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(
+                    "Daftar Kontak Tersimpan (${controller.savedContacts.size}):",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
                 Spacer(modifier = Modifier.height(8.dp))
             }
             items(controller.savedContacts) { contact ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).background(ResqLightBlue.copy(alpha = 0.3f), RoundedCornerShape(8.dp)).padding(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .background(
+                            ResqLightBlue.copy(alpha = 0.3f),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Default.Person, contentDescription = null, tint = ResqBlue)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(contact.namaLengkap, fontWeight = FontWeight.Bold)
-                        Text("${contact.hubungan} - ${contact.noTelepon}", fontSize = 12.sp, color = TextGray)
+                        Text(
+                            "${contact.hubungan} - ${contact.noTelepon}",
+                            fontSize = 12.sp, color = TextGray
+                        )
                     }
                 }
             }
@@ -207,21 +343,38 @@ fun SignUpStep4(controller: AuthController, navController: NavController) {
         item {
             Spacer(modifier = Modifier.height(16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = controller.termsAccepted, onCheckedChange = { controller.termsAccepted = it })
+                Checkbox(
+                    checked = controller.termsAccepted,
+                    onCheckedChange = { controller.termsAccepted = it }
+                )
                 Text("Saya menyetujui ", fontSize = 12.sp)
                 Text("Syarat dan Ketentuan", fontSize = 12.sp, color = ResqBlue)
+            }
+
+            if (!controller.termsAccepted) {
+                Text(
+                    "Anda harus menyetujui syarat dan ketentuan untuk melanjutkan",
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(start = 48.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = { controller.submitRegistration(navController) },
-                // Aktif jika syarat dicentang dan tidak loading. Kontak tidak wajib.
                 enabled = controller.termsAccepted && !controller.isLoading,
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ResqBlue), shape = RoundedCornerShape(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = ResqBlue),
+                shape = RoundedCornerShape(8.dp)
             ) {
                 if (controller.isLoading) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
                 } else {
                     Text("Mulai", fontSize = 16.sp)
                 }

@@ -5,14 +5,11 @@ import com.google.firebase.Timestamp
 data class Report(
     val reportId: String = "",
     val userId: String = "",
-    // Informasi Pelapor
     val namaPelapor: String = "",
     val noTelepon: String = "",
     val email: String = "",
-    // Kategori
     val jenisLaporan: String = "", // "Kejahatan & Keamanan", dll
     val subJenis: String = "", // "Pencurian Kendaraan", dll
-    // Detail kejadian umum
     val judul: String = "",
     val kronologi: String = "",
     val lokasi: String = "",
@@ -20,21 +17,16 @@ data class Report(
     val longitude: Double = 0.0,
     val tanggalKejadian: String = "", // "25/04/2025"
     val waktuKejadian: String = "", // "12:26"
-    // Detail spesifik per kategori (flexible)
     val details: Map<String, Any> = emptyMap(),
-    // Lampiran
     val photos: List<String> = emptyList(),
     val namaSaksi: String = "",
     val kontakSaksi: String = "",
-    // Routing ke petugas
     val targetRoles: List<Int> = emptyList(),
     val status: String = "Menunggu", // Menunggu, Diterima, Diproses, Selesai, Ditolak
     val acceptedBy: String = "",
     val acceptedByName: String = "",
     val tanggalLapor: Timestamp? = null
 )
-
-// Kategori utama dan sub-kategori
 data class LaporanKategori(
     val id: String,
     val nama: String,

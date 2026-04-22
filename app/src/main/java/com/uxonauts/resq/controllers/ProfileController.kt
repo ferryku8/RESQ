@@ -24,28 +24,18 @@ class ProfileController : ViewModel() {
     var isLoading by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
     var successMessage by mutableStateOf<String?>(null)
-
-    // Data user
     var user by mutableStateOf(User())
     var medicalInfo by mutableStateOf(MedicalInfo())
     var emergencyContacts by mutableStateOf<List<EmergencyContact>>(emptyList())
-
-    // Foto profil
     var profileImageUrl by mutableStateOf("")
     var isUploadingPhoto by mutableStateOf(false)
-
-    // Section expand state
     var biodataExpanded by mutableStateOf(false)
     var medicalExpanded by mutableStateOf(false)
     var emergencyExpanded by mutableStateOf(false)
-
-    // Edit state biodata
     var editNamaLengkap by mutableStateOf("")
     var editNoTelepon by mutableStateOf("")
     var editAlamat by mutableStateOf("")
     var editJenisKelamin by mutableStateOf("")
-
-    // Edit state medis
     var editGolDarah by mutableStateOf("")
     var editTinggi by mutableStateOf("")
     var editBerat by mutableStateOf("")
@@ -62,7 +52,6 @@ class ProfileController : ViewModel() {
         viewModelScope.launch {
             isLoading = true
             try {
-                // User
                 val userDoc = db.collection("users").document(uid).get().await()
                 userDoc.toObject(User::class.java)?.let {
                     user = it
@@ -72,8 +61,6 @@ class ProfileController : ViewModel() {
                     editAlamat = it.alamat
                     editJenisKelamin = it.jenisKelamin
                 }
-
-                // Medical
                 val medDoc = db.collection("medical_info").document(uid).get().await()
                 medDoc.toObject(MedicalInfo::class.java)?.let {
                     medicalInfo = it
@@ -84,8 +71,6 @@ class ProfileController : ViewModel() {
                     editObatRutin = it.obatRutin
                     editAlergi = it.alergi
                 }
-
-                // Emergency Contacts
                 val contactsSnap = db.collection("emergency_contacts")
                     .whereEqualTo("userId", uid).get().await()
                 emergencyContacts = contactsSnap.toObjects(EmergencyContact::class.java)

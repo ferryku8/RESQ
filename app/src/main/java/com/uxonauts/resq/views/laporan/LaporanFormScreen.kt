@@ -15,7 +15,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -44,6 +43,10 @@ fun LaporanFormScreen(
 ) {
     val context = LocalContext.current
 
+    var step1Errors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var step2Errors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var step4Error by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(Unit) {
         controller.setKategori(jenisLaporan, subJenis)
     }
@@ -59,14 +62,84 @@ fun LaporanFormScreen(
         }
     }
 
+    fun validateStep1(): Boolean {
+        val errors = mutableMapOf<String, String>()
+
+        if (controller.namaPelapor.isBlank())
+            errors["nama"] = "Nama pelapor wajib diisi"
+        else if (controller.namaPelapor.length < 3)
+            errors["nama"] = "Nama pelapor minimal 3 karakter"
+
+        if (controller.noTelepon.isBlank())
+            errors["telepon"] = "Nomor telepon wajib diisi"
+        else if (controller.noTelepon.length < 10)
+            errors["telepon"] = "Nomor telepon minimal 10 digit"
+        else if (!controller.noTelepon.matches(Regex("^[0-9+\\-\\s]+$")))
+            errors["telepon"] = "Nomor telepon hanya boleh berisi angka"
+
+        if (controller.email.isBlank())
+            errors["email"] = "Email wajib diisi"
+        else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(controller.email).matches())
+            errors["email"] = "Format email tidak valid (contoh: nama@email.com)"
+
+        if (controller.judulLaporan.isBlank())
+            errors["judul"] = "Judul laporan wajib diisi"
+        else if (controller.judulLaporan.length < 5)
+            errors["judul"] = "Judul laporan minimal 5 karakter"
+
+        if (controller.tanggalKejadian.isBlank())
+            errors["tanggal"] = "Tanggal kejadian wajib dipilih"
+
+        if (controller.waktuKejadian.isBlank())
+            errors["waktu"] = "Waktu kejadian wajib dipilih"
+
+        if (controller.lokasi.isBlank())
+            errors["lokasi"] = "Lokasi kejadian wajib diisi"
+
+        if (controller.kronologi.isBlank())
+            errors["kronologi"] = "Kronologi kejadian wajib diisi"
+        else if (controller.kronologi.length < 20)
+            errors["kronologi"] = "Kronologi minimal 20 karakter agar lebih jelas"
+
+        step1Errors = errors
+        return errors.isEmpty()
+    }
+
+    fun validateStep2(): Boolean {
+        if (!controller.subJenis.equals("Pencurian Kendaraan", ignoreCase = true)) return true
+        val errors = mutableMapOf<String, String>()
+
+        if (controller.jenisKendaraan.isBlank()) errors["jenis"] = "Jenis kendaraan wajib diisi"
+        if (controller.merkKendaraan.isBlank()) errors["merk"] = "Merk kendaraan wajib diisi"
+        if (controller.warna.isBlank()) errors["warna"] = "Warna kendaraan wajib diisi"
+        if (controller.tnkb.isBlank()) errors["tnkb"] = "Nomor plat (TNKB) wajib diisi"
+
+        step2Errors = errors
+        return errors.isEmpty()
+    }
+
+    fun validateStep4(): Boolean {
+        if (!controller.konfirmasiBenar) {
+            step4Error =
+                "Anda harus menyetujui pernyataan kebenaran data sebelum mengirim laporan"
+            return false
+        }
+        step4Error = null
+        return true
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Laporan", fontWeight = FontWeight.Bold, fontSize = 22.sp) },
                 navigationIcon = {
                     IconButton(onClick = {
-                        if (controller.currentStep > 1) controller.currentStep--
-                        else navController.popBackStack()
+                        if (controller.currentStep > 1) {
+                            controller.currentStep--
+                            step1Errors = emptyMap()
+                            step2Errors = emptyMap()
+                            step4Error = null
+                        } else navController.popBackStack()
                     }) {
                         Icon(Icons.Default.ArrowBack, "Kembali")
                     }
@@ -90,10 +163,16 @@ fun LaporanFormScreen(
             Spacer(Modifier.height(24.dp))
 
             when (controller.currentStep) {
-                1 -> Step1InformasiPelapor(controller)
-                2 -> Step2DetailSpesifik(controller)
+                1 -> Step1InformasiPelapor(
+                    controller, step1Errors,
+                    onClearError = { key -> step1Errors = step1Errors - key },
+                    onSetError = { key, msg -> step1Errors = step1Errors + (key to msg) }
+                )
+                2 -> Step2DetailSpesifik(controller, step2Errors) { key ->
+                    step2Errors = step2Errors - key
+                }
                 3 -> Step3InfoTambahan(controller)
-                4 -> Step4Konfirmasi(controller)
+                4 -> Step4Konfirmasi(controller, step4Error) { step4Error = null }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -101,15 +180,15 @@ fun LaporanFormScreen(
             Button(
                 onClick = {
                     when (controller.currentStep) {
-                        1 -> if (controller.isStep1Valid()) controller.currentStep = 2
-                        else Toast.makeText(context, "Lengkapi semua field", Toast.LENGTH_SHORT).show()
-                        2 -> if (controller.isStep2Valid()) controller.currentStep = 3
-                        else Toast.makeText(context, "Lengkapi detail kendaraan", Toast.LENGTH_SHORT).show()
+                        1 -> if (validateStep1()) controller.currentStep = 2
+                        2 -> if (validateStep2()) controller.currentStep = 3
                         3 -> controller.currentStep = 4
                         4 -> {
-                            controller.submitReport {
-                                navController.popBackStack()
-                                navController.popBackStack() // kembali ke home
+                            if (validateStep4()) {
+                                controller.submitReport {
+                                    navController.popBackStack()
+                                    navController.popBackStack()
+                                }
                             }
                         }
                     }
@@ -126,8 +205,7 @@ fun LaporanFormScreen(
                 } else {
                     Text(
                         if (controller.currentStep == 4) "Kirim Laporan" else "Lanjutkan",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 16.sp, fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -177,77 +255,124 @@ private fun StepIndicator(currentStep: Int, totalSteps: Int) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Step1InformasiPelapor(controller: ReportController) {
+private fun Step1InformasiPelapor(
+    controller: ReportController,
+    errors: Map<String, String>,
+    onClearError: (String) -> Unit,
+    onSetError: (String, String) -> Unit
+) {
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
 
     Column {
         SectionTitle("Informasi Pelapor")
-        LabeledField("Nama Lengkap Pelapor", controller.namaPelapor) { controller.namaPelapor = it }
-        LabeledField("Nomor Telepon Aktif", controller.noTelepon) { controller.noTelepon = it }
-        LabeledField("Alamat Email", controller.email) { controller.email = it }
+        ValidatedField("Nama Lengkap Pelapor *", controller.namaPelapor, errors["nama"]) {
+            controller.namaPelapor = it
+            onClearError("nama")
+        }
+        ValidatedField("Nomor Telepon Aktif *", controller.noTelepon, errors["telepon"]) {
+            controller.noTelepon = it
+            onClearError("telepon")
+        }
+        ValidatedField("Alamat Email *", controller.email, errors["email"]) {
+            controller.email = it
+            onClearError("email")
+        }
 
         Spacer(Modifier.height(16.dp))
         SectionTitle("Detail Kejadian")
         LabeledReadOnlyField("Jenis Laporan", controller.subJenis)
-        LabeledField("Judul Laporan", controller.judulLaporan) { controller.judulLaporan = it }
+        ValidatedField("Judul Laporan *", controller.judulLaporan, errors["judul"]) {
+            controller.judulLaporan = it
+            onClearError("judul")
+        }
 
-        // Date Picker Field
         DatePickerField(
-            label = "Tanggal Kejadian",
+            label = "Tanggal Kejadian *",
             value = controller.tanggalKejadian,
+            error = errors["tanggal"],
             onClick = { showDatePicker = true }
         )
-
-        // Time Picker Field
         TimePickerField(
-            label = "Waktu Kejadian",
+            label = "Waktu Kejadian *",
             value = controller.waktuKejadian,
+            error = errors["waktu"],
             onClick = { showTimePicker = true }
         )
 
-        LabeledField("Lokasi Kejadian", controller.lokasi) { controller.lokasi = it }
-        LabeledField(
-            "Kronologi Kejadian",
-            controller.kronologi,
+        ValidatedField("Lokasi Kejadian *", controller.lokasi, errors["lokasi"]) {
+            controller.lokasi = it
+            onClearError("lokasi")
+        }
+        ValidatedField(
+            "Kronologi Kejadian *", controller.kronologi, errors["kronologi"],
             minLines = 4
-        ) { controller.kronologi = it }
+        ) {
+            controller.kronologi = it
+            onClearError("kronologi")
+        }
     }
 
-    // Date Picker Dialog
+    // Date Picker — blokir tanggal masa depan
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = System.currentTimeMillis()
+            initialSelectedDateMillis = System.currentTimeMillis(),
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    return utcTimeMillis <= System.currentTimeMillis()
+                }
+            }
         )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            val sdf = java.text.SimpleDateFormat(
-                                "dd/MM/yyyy",
-                                java.util.Locale("id", "ID")
-                            )
-                            controller.tanggalKejadian = sdf.format(java.util.Date(millis))
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val sdf = java.text.SimpleDateFormat(
+                            "dd/MM/yyyy", java.util.Locale("id", "ID")
+                        )
+                        controller.tanggalKejadian = sdf.format(java.util.Date(millis))
+                        onClearError("tanggal")
+
+                        // Reset waktu kalau tanggal berubah ke hari ini
+                        // (supaya validasi jam konsisten)
+                        val today = sdf.format(java.util.Date())
+                        if (controller.tanggalKejadian == today && controller.waktuKejadian.isNotBlank()) {
+                            // Re-validasi waktu yang sudah dipilih
+                            val now = java.util.Calendar.getInstance()
+                            val currentHour = now.get(java.util.Calendar.HOUR_OF_DAY)
+                            val currentMinute = now.get(java.util.Calendar.MINUTE)
+                            try {
+                                val timeParts = controller.waktuKejadian
+                                    .replace(" WIB", "").split(":")
+                                val pickedHour = timeParts[0].toInt()
+                                val pickedMinute = timeParts[1].toInt()
+                                if (pickedHour > currentHour ||
+                                    (pickedHour == currentHour && pickedMinute > currentMinute)
+                                ) {
+                                    controller.waktuKejadian = ""
+                                    onSetError(
+                                        "waktu",
+                                        "Waktu sebelumnya tidak valid untuk hari ini. Pilih ulang waktu."
+                                    )
+                                }
+                            } catch (_: Exception) { }
                         }
-                        showDatePicker = false
                     }
-                ) {
+                    showDatePicker = false
+                }) {
                     Text("OK", color = Color(0xFF0084FF), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text("Batal")
-                }
+                TextButton(onClick = { showDatePicker = false }) { Text("Batal") }
             }
         ) {
             DatePicker(state = datePickerState)
         }
     }
 
-    // Time Picker Dialog
+    // Time Picker — blokir jam masa depan kalau tanggal = hari ini
     if (showTimePicker) {
         val timePickerState = rememberTimePickerState(
             initialHour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY),
@@ -257,61 +382,99 @@ private fun Step1InformasiPelapor(controller: ReportController) {
         AlertDialog(
             onDismissRequest = { showTimePicker = false },
             title = { Text("Pilih Waktu Kejadian", fontWeight = FontWeight.Bold) },
-            text = {
-                TimePicker(state = timePickerState)
-            },
+            text = { TimePicker(state = timePickerState) },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        val hour = timePickerState.hour.toString().padStart(2, '0')
-                        val minute = timePickerState.minute.toString().padStart(2, '0')
-                        controller.waktuKejadian = "$hour:$minute WIB"
-                        showTimePicker = false
+                TextButton(onClick = {
+                    val selectedHour = timePickerState.hour
+                    val selectedMinute = timePickerState.minute
+
+                    // Cek apakah tanggal kejadian adalah HARI INI
+                    val todaySdf = java.text.SimpleDateFormat(
+                        "dd/MM/yyyy", java.util.Locale("id", "ID")
+                    )
+                    val today = todaySdf.format(java.util.Date())
+                    val isToday = controller.tanggalKejadian == today
+
+                    if (isToday) {
+                        val now = java.util.Calendar.getInstance()
+                        val currentHour = now.get(java.util.Calendar.HOUR_OF_DAY)
+                        val currentMinute = now.get(java.util.Calendar.MINUTE)
+
+                        if (selectedHour > currentHour ||
+                            (selectedHour == currentHour && selectedMinute > currentMinute)
+                        ) {
+                            // Jam masa depan — tolak
+                            onSetError(
+                                "waktu",
+                                "Waktu kejadian tidak boleh melebihi waktu saat ini (${
+                                    currentHour.toString().padStart(2, '0')
+                                }:${
+                                    currentMinute.toString().padStart(2, '0')
+                                } WIB)"
+                            )
+                            showTimePicker = false
+                            return@TextButton
+                        }
                     }
-                ) {
+
+                    // Valid
+                    val hour = selectedHour.toString().padStart(2, '0')
+                    val minute = selectedMinute.toString().padStart(2, '0')
+                    controller.waktuKejadian = "$hour:$minute WIB"
+                    onClearError("waktu")
+                    showTimePicker = false
+                }) {
                     Text("OK", color = Color(0xFF0084FF), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showTimePicker = false }) {
-                    Text("Batal")
-                }
+                TextButton(onClick = { showTimePicker = false }) { Text("Batal") }
             }
         )
     }
 }
 
 @Composable
-private fun Step2DetailSpesifik(controller: ReportController) {
+private fun Step2DetailSpesifik(
+    controller: ReportController,
+    errors: Map<String, String>,
+    onClearError: (String) -> Unit
+) {
     Column {
-        // Kalau subJenis adalah Pencurian Kendaraan, tampilkan form kendaraan
         when (controller.subJenis.lowercase()) {
             "pencurian kendaraan" -> {
                 SectionTitle("Detail Kendaraan yang Hilang")
-                LabeledField("Jenis Kendaraan", controller.jenisKendaraan) {
+                ValidatedField("Jenis Kendaraan *", controller.jenisKendaraan, errors["jenis"]) {
                     controller.jenisKendaraan = it
+                    onClearError("jenis")
                 }
-                LabeledField("Merk", controller.merkKendaraan) { controller.merkKendaraan = it }
+                ValidatedField("Merk *", controller.merkKendaraan, errors["merk"]) {
+                    controller.merkKendaraan = it
+                    onClearError("merk")
+                }
                 LabeledField("Tipe / Model", controller.tipeModel) { controller.tipeModel = it }
                 LabeledField("Tahun Pembuatan", controller.tahunPembuatan) {
                     controller.tahunPembuatan = it
                 }
-                LabeledField("Warna", controller.warna) { controller.warna = it }
-                LabeledField("TNKB (Plat Nomor)", controller.tnkb) { controller.tnkb = it }
+                ValidatedField("Warna *", controller.warna, errors["warna"]) {
+                    controller.warna = it
+                    onClearError("warna")
+                }
+                ValidatedField("TNKB (Plat Nomor) *", controller.tnkb, errors["tnkb"]) {
+                    controller.tnkb = it
+                    onClearError("tnkb")
+                }
                 LabeledField("Nomor Rangka", controller.noRangka) { controller.noRangka = it }
                 LabeledField("Nomor Mesin", controller.noMesin) { controller.noMesin = it }
                 LabeledField(
-                    "Ciri-ciri Khusus Kendaraan",
-                    controller.ciriKhusus,
-                    minLines = 3
+                    "Ciri-ciri Khusus Kendaraan", controller.ciriKhusus, minLines = 3
                 ) { controller.ciriKhusus = it }
             }
             else -> {
                 SectionTitle("Detail Tambahan")
                 Text(
                     "Tidak ada detail spesifik untuk kategori ini. Lanjut ke langkah berikutnya.",
-                    color = Color.Gray,
-                    fontSize = 13.sp
+                    color = Color.Gray, fontSize = 13.sp
                 )
             }
         }
@@ -345,8 +508,10 @@ private fun Step3InfoTambahan(controller: ReportController) {
                 controller.stnkAda
             ) { controller.stnkAda = it }
 
-            Text("Status BPKB:", fontSize = 13.sp, color = Color.Gray,
-                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+            Text(
+                "Status BPKB:", fontSize = 13.sp, color = Color.Gray,
+                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+            )
             Row {
                 listOf("Ada", "Tidak", "Di Leasing").forEach { opt ->
                     Row(
@@ -364,8 +529,7 @@ private fun Step3InfoTambahan(controller: ReportController) {
             }
             Spacer(Modifier.height(12.dp))
             LabeledField(
-                "Estimasi Nilai Kendaraan (Rp)",
-                controller.estimasiNilai
+                "Estimasi Nilai Kendaraan (Rp)", controller.estimasiNilai
             ) { controller.estimasiNilai = it }
         }
 
@@ -398,33 +562,73 @@ private fun Step3InfoTambahan(controller: ReportController) {
 }
 
 @Composable
-private fun Step4Konfirmasi(controller: ReportController) {
+private fun Step4Konfirmasi(
+    controller: ReportController,
+    error: String?,
+    onClearError: () -> Unit
+) {
     Column {
-        SectionTitle("Informasi Kejadian")
-        Text(controller.judulLaporan, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Text(
-            "${controller.tanggalKejadian} - ${controller.waktuKejadian} - ${controller.lokasi}",
-            fontSize = 12.sp, color = Color.Gray
-        )
-        Spacer(Modifier.height(8.dp))
-        Text("Kronologi:", fontSize = 13.sp, color = Color.Gray)
-        Text(controller.kronologi, fontSize = 13.sp)
+        SectionTitle("Ringkasan Laporan")
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Text(
+                    "Informasi Kejadian", fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0084FF)
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(controller.judulLaporan, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "${controller.tanggalKejadian} • ${controller.waktuKejadian} • ${controller.lokasi}",
+                    fontSize = 12.sp, color = Color.Gray
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("Kronologi:", fontSize = 12.sp, color = Color.Gray)
+                Text(controller.kronologi, fontSize = 13.sp)
+            }
+        }
 
         if (controller.subJenis.equals("Pencurian Kendaraan", ignoreCase = true)) {
-            Spacer(Modifier.height(16.dp))
-            SectionTitle("Detail Kendaraan")
-            SummaryRow("Jenis", "${controller.jenisKendaraan} - ${controller.merkKendaraan} ${controller.tipeModel}")
-            SummaryRow("Tahun", controller.tahunPembuatan)
-            SummaryRow("Warna", controller.warna)
-            SummaryRow("TNKB", controller.tnkb)
-            SummaryRow("No Rangka", controller.noRangka)
-            SummaryRow("No Mesin", controller.noMesin)
-            SummaryRow("Ciri Khusus", controller.ciriKhusus)
+            Spacer(Modifier.height(12.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        "Detail Kendaraan", fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0084FF)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    SummaryRow(
+                        "Kendaraan",
+                        "${controller.jenisKendaraan} ${controller.merkKendaraan} ${controller.tipeModel}"
+                    )
+                    SummaryRow("Tahun", controller.tahunPembuatan)
+                    SummaryRow("Warna", controller.warna)
+                    SummaryRow("TNKB", controller.tnkb)
+                    if (controller.noRangka.isNotBlank()) SummaryRow(
+                        "No Rangka", controller.noRangka
+                    )
+                    if (controller.noMesin.isNotBlank()) SummaryRow(
+                        "No Mesin", controller.noMesin
+                    )
+                    if (controller.ciriKhusus.isNotBlank()) SummaryRow(
+                        "Ciri Khusus", controller.ciriKhusus
+                    )
+                }
+            }
         }
 
         controller.fotoKendaraanUri?.let { uri ->
-            Spacer(Modifier.height(16.dp))
-            Text("Foto:", fontSize = 13.sp, color = Color.Gray)
+            Spacer(Modifier.height(12.dp))
+            Text("Foto Bukti:", fontSize = 13.sp, color = Color.Gray)
             Spacer(Modifier.height(4.dp))
             Image(
                 painter = rememberAsyncImagePainter(uri),
@@ -436,16 +640,29 @@ private fun Step4Konfirmasi(controller: ReportController) {
             )
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { controller.konfirmasiBenar = !controller.konfirmasiBenar },
+                .then(
+                    if (error != null) Modifier
+                        .border(1.dp, Color.Red, RoundedCornerShape(8.dp))
+                        .padding(4.dp)
+                    else Modifier
+                )
+                .clickable {
+                    controller.konfirmasiBenar = !controller.konfirmasiBenar
+                    onClearError()
+                },
             verticalAlignment = Alignment.CenterVertically
         ) {
             Checkbox(
                 checked = controller.konfirmasiBenar,
-                onCheckedChange = { controller.konfirmasiBenar = it }
+                onCheckedChange = {
+                    controller.konfirmasiBenar = it
+                    onClearError()
+                }
             )
             Text(
                 "Saya menyatakan bahwa seluruh informasi yang saya berikan dalam laporan ini adalah benar dan dapat dipertanggungjawabkan.",
@@ -453,18 +670,58 @@ private fun Step4Konfirmasi(controller: ReportController) {
                 modifier = Modifier.padding(start = 4.dp)
             )
         }
+        if (error != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                error, color = Color.Red, fontSize = 11.sp,
+                modifier = Modifier.padding(start = 4.dp)
+            )
+        }
     }
 }
 
-// Helper composables
+// === HELPER COMPOSABLES ===
+
 @Composable
 private fun SectionTitle(text: String) {
     Text(
-        text,
-        fontSize = 20.sp,
-        fontWeight = FontWeight.Bold,
+        text, fontSize = 20.sp, fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(vertical = 8.dp)
     )
+}
+
+@Composable
+private fun ValidatedField(
+    label: String,
+    value: String,
+    error: String?,
+    minLines: Int = 1,
+    onValueChange: (String) -> Unit
+) {
+    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+        Text(label, fontSize = 13.sp, color = Color.Gray)
+        Spacer(Modifier.height(4.dp))
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            minLines = minLines,
+            shape = RoundedCornerShape(10.dp),
+            isError = error != null,
+            supportingText = {
+                if (error != null) {
+                    Text(error, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = Color.White,
+                unfocusedContainerColor = Color.White,
+                focusedBorderColor = Color(0xFF0084FF),
+                errorBorderColor = Color.Red
+            ),
+            singleLine = minLines == 1
+        )
+    }
 }
 
 @Composable
@@ -558,8 +815,10 @@ private fun PhotoUploadBox(label: String, uri: android.net.Uri?, onClick: () -> 
                     contentScale = ContentScale.Crop
                 )
             } else {
-                Icon(Icons.Default.Add, null, tint = Color(0xFF0084FF),
-                    modifier = Modifier.size(40.dp))
+                Icon(
+                    Icons.Default.Add, null, tint = Color(0xFF0084FF),
+                    modifier = Modifier.size(40.dp)
+                )
             }
         }
     }
@@ -567,16 +826,20 @@ private fun PhotoUploadBox(label: String, uri: android.net.Uri?, onClick: () -> 
 
 @Composable
 private fun SummaryRow(label: String, value: String) {
-    Row(modifier = Modifier.padding(vertical = 2.dp)) {
-        Text("$label: ", fontSize = 13.sp, color = Color.Gray)
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+    if (value.isNotBlank()) {
+        Row(modifier = Modifier.padding(vertical = 2.dp)) {
+            Text("$label: ", fontSize = 13.sp, color = Color.Gray)
+            Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DatePickerField(
     label: String,
     value: String,
+    error: String? = null,
     onClick: () -> Unit
 ) {
     Column(modifier = Modifier.padding(vertical = 6.dp)) {
@@ -592,17 +855,19 @@ private fun DatePickerField(
             enabled = false,
             placeholder = { Text("dd/MM/yyyy") },
             trailingIcon = {
-                Icon(
-                    Icons.Default.CalendarMonth,
-                    contentDescription = "Pilih tanggal",
-                    tint = Color(0xFF0084FF)
-                )
+                Icon(Icons.Default.CalendarMonth, "Pilih tanggal", tint = Color(0xFF0084FF))
             },
             shape = RoundedCornerShape(10.dp),
+            isError = error != null,
+            supportingText = {
+                if (error != null) {
+                    Text(error, color = MaterialTheme.colorScheme.error)
+                }
+            },
             colors = OutlinedTextFieldDefaults.colors(
                 disabledTextColor = Color.Black,
                 disabledContainerColor = Color.White,
-                disabledBorderColor = Color(0xFFE0E0E0),
+                disabledBorderColor = if (error != null) Color.Red else Color(0xFFE0E0E0),
                 disabledTrailingIconColor = Color(0xFF0084FF),
                 disabledPlaceholderColor = Color.Gray
             )
@@ -610,10 +875,12 @@ private fun DatePickerField(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimePickerField(
     label: String,
     value: String,
+    error: String? = null,
     onClick: () -> Unit
 ) {
     Column(modifier = Modifier.padding(vertical = 6.dp)) {
@@ -629,17 +896,19 @@ private fun TimePickerField(
             enabled = false,
             placeholder = { Text("HH:mm WIB") },
             trailingIcon = {
-                Icon(
-                    Icons.Default.AccessTime,
-                    contentDescription = "Pilih waktu",
-                    tint = Color(0xFF0084FF)
-                )
+                Icon(Icons.Default.AccessTime, "Pilih waktu", tint = Color(0xFF0084FF))
             },
             shape = RoundedCornerShape(10.dp),
+            isError = error != null,
+            supportingText = {
+                if (error != null) {
+                    Text(error, color = MaterialTheme.colorScheme.error)
+                }
+            },
             colors = OutlinedTextFieldDefaults.colors(
                 disabledTextColor = Color.Black,
                 disabledContainerColor = Color.White,
-                disabledBorderColor = Color(0xFFE0E0E0),
+                disabledBorderColor = if (error != null) Color.Red else Color(0xFFE0E0E0),
                 disabledTrailingIconColor = Color(0xFF0084FF),
                 disabledPlaceholderColor = Color.Gray
             )

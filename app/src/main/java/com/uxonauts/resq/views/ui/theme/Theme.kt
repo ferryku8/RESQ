@@ -38,7 +38,6 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun RESQTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
     dynamicColor: Boolean = false, // Matikan dynamic color agar konsisten
     content: @Composable () -> Unit
 ) {
@@ -55,10 +54,7 @@ fun RESQTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            // Set status bar color to Background Color
             window.statusBarColor = colorScheme.background.toArgb()
-
-            // Set status bar icons to DARK (Hitam)
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = true
         }
     }

@@ -31,11 +31,9 @@ class HomeController : ViewModel() {
                     val document = db.collection("users").document(uid).get().await()
                     val user = document.toObject(User::class.java)
                     if (user != null) {
-                        // Ambil nama depan saja biar lebih personal
                         userName = user.namaLengkap.split(" ").firstOrNull() ?: "Pengguna"
                     }
                 } catch (e: Exception) {
-                    // Fail silently or set default
                     userName = "Pengguna"
                 }
             }
@@ -44,10 +42,8 @@ class HomeController : ViewModel() {
     }
 
     fun triggerSos() {
-        // Simulasi pengiriman SOS
         viewModelScope.launch {
             sosState = true
-            // Disini nanti logika kirim lokasi ke Firestore / FCM
             kotlinx.coroutines.delay(2000) // Delay simulasi
             sosState = false
         }

@@ -26,25 +26,16 @@ class ReportController : ViewModel() {
     var errorMessage by mutableStateOf<String?>(null)
     var successMessage by mutableStateOf<String?>(null)
     var currentStep by mutableStateOf(1) // 1-4
-
-    // Step 1: Informasi Pelapor
     var namaPelapor by mutableStateOf("")
     var noTelepon by mutableStateOf("")
     var email by mutableStateOf("")
-
-    // Kategori dari home
     var jenisLaporan by mutableStateOf("") // "Kejahatan & Keamanan"
     var subJenis by mutableStateOf("") // "Pencurian Kendaraan"
-
-    // Detail kejadian (umum)
     var judulLaporan by mutableStateOf("")
     var tanggalKejadian by mutableStateOf("")
     var waktuKejadian by mutableStateOf("")
     var lokasi by mutableStateOf("")
     var kronologi by mutableStateOf("")
-
-    // Step 2 Detail Spesifik — semua disimpan di map 'details'
-    // Untuk Pencurian Kendaraan:
     var jenisKendaraan by mutableStateOf("Motor")
     var merkKendaraan by mutableStateOf("")
     var tipeModel by mutableStateOf("")
@@ -54,26 +45,16 @@ class ReportController : ViewModel() {
     var noRangka by mutableStateOf("")
     var noMesin by mutableStateOf("")
     var ciriKhusus by mutableStateOf("")
-
-    // Step 3: Info Tambahan
     var kunciIkutHilang by mutableStateOf(false)
     var stnkAda by mutableStateOf(true)
     var bpkbStatus by mutableStateOf("Ada") // Ada / Tidak / Di Leasing
     var estimasiNilai by mutableStateOf("")
-
-    // Foto uri sementara
     var fotoKendaraanUri by mutableStateOf<Uri?>(null)
     var fotoStnkUri by mutableStateOf<Uri?>(null)
     var fotoBuktiUri by mutableStateOf<Uri?>(null)
-
-    // Saksi
     var namaSaksi by mutableStateOf("")
     var kontakSaksi by mutableStateOf("")
-
-    // Step 4: Konfirmasi
     var konfirmasiBenar by mutableStateOf(false)
-
-    // List report user (untuk history)
     val userReports = mutableStateListOf<Report>()
 
     init {
@@ -91,7 +72,6 @@ class ReportController : ViewModel() {
                     email = doc.getString("email") ?: ""
                 }
             } catch (e: Exception) {
-                // silent fail
             }
         }
     }
@@ -99,7 +79,6 @@ class ReportController : ViewModel() {
     fun setKategori(jenis: String, sub: String) {
         jenisLaporan = jenis
         subJenis = sub
-        // Reset fields
         currentStep = 1
     }
 
@@ -115,7 +94,6 @@ class ReportController : ViewModel() {
     }
 
     fun isStep2Valid(): Boolean {
-        // Khusus Pencurian Kendaraan — adjust sesuai kategori
         return when (subJenis.lowercase()) {
             "pencurian kendaraan" -> merkKendaraan.isNotBlank() &&
                     tipeModel.isNotBlank() &&
@@ -141,8 +119,6 @@ class ReportController : ViewModel() {
             isLoading = true
             try {
                 val reportId = UUID.randomUUID().toString()
-
-                // Upload foto-foto (kalau ada)
                 val photoUrls = mutableListOf<String>()
                 fotoKendaraanUri?.let { uri ->
                     val url = uploadPhoto(reportId, "kendaraan", uri)
@@ -156,8 +132,6 @@ class ReportController : ViewModel() {
                     val url = uploadPhoto(reportId, "bukti", uri)
                     if (url.isNotEmpty()) photoUrls.add(url)
                 }
-
-                // Build details map berdasarkan subJenis
                 val details = buildDetailsMap()
 
                 val targetRoles = CategoryRoleMapper.getReportTargetRoles(subJenis)
@@ -201,7 +175,6 @@ class ReportController : ViewModel() {
     }
 
     private fun buildDetailsMap(): Map<String, Any> {
-        // Kumpulkan semua detail spesifik per kategori
         return when (subJenis.lowercase()) {
             "pencurian kendaraan" -> mapOf(
                 "jenisKendaraan" to jenisKendaraan,

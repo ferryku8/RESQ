@@ -48,8 +48,6 @@ class EmergencyListenerService : Service() {
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-            // Foreground service channel
             val foregroundChannel = NotificationChannel(
                 FOREGROUND_CHANNEL,
                 "Layanan Kontak Darurat",
@@ -58,8 +56,6 @@ class EmergencyListenerService : Service() {
                 description = "Memantau notifikasi darurat dari keluarga/teman"
             }
             nm.createNotificationChannel(foregroundChannel)
-
-            // Alert channel (high priority)
             val alertChannel = NotificationChannel(
                 ALERT_CHANNEL,
                 "Kontak Darurat SOS",
@@ -103,8 +99,6 @@ class EmergencyListenerService : Service() {
             stopSelf()
             return
         }
-
-        // Listen ke notifikasi yang targetUserId-nya adalah user ini
         listenerReg = db.collection("emergency_notifications")
             .whereEqualTo("targetUserId", uid)
             .orderBy("timestamp", Query.Direction.DESCENDING)
@@ -118,8 +112,6 @@ class EmergencyListenerService : Service() {
                 if (snapshot == null) return@addSnapshotListener
 
                 val currentIds = snapshot.documents.map { it.id }.toSet()
-
-                // Skip snapshot pertama (existing data bukan notifikasi baru)
                 if (isFirstSnapshot) {
                     previousIds = currentIds
                     isFirstSnapshot = false

@@ -74,8 +74,6 @@ fun ProgressLaporanScreen(navController: NavController, reportId: String) {
                     acceptedByName = snapshot.getString("acceptedByName") ?: ""
                     @Suppress("UNCHECKED_CAST")
                     progressNotes = (snapshot.get("progressNotes") as? List<Map<String, Any>>) ?: emptyList()
-
-                    // Fetch kontak petugas
                     val acceptedBy = snapshot.getString("acceptedBy") ?: ""
                     if (acceptedBy.isNotEmpty()) {
                         firestore.collection("petugas").document(acceptedBy).get()
@@ -181,8 +179,6 @@ fun ProgressLaporanScreen(navController: NavController, reportId: String) {
             }
 
             Spacer(Modifier.height(24.dp))
-
-            // Tombol Selesai (jika status sudah selesai, tampilkan banner hijau)
             if (status == "Selesai") {
                 Box(
                     Modifier.fillMaxWidth().background(Color(0xFFE8F5E9), RoundedCornerShape(14.dp)).padding(16.dp),
@@ -219,8 +215,6 @@ private fun ProgressStepperUser(currentStatus: String) {
     ) {
         USER_STAGES.forEachIndexed { i, stage ->
             val active = i <= idx
-
-            // Kolom untuk circle + label
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.width(72.dp)
@@ -253,8 +247,6 @@ private fun ProgressStepperUser(currentStatus: String) {
                     maxLines = 2
                 )
             }
-
-            // Garis penghubung antar circle
             if (i < USER_STAGES.size - 1) {
                 Box(
                     modifier = Modifier

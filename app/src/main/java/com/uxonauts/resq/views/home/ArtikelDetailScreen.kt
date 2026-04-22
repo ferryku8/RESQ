@@ -82,8 +82,6 @@ fun ArtikelDetailScreen(navController: NavController, articleId: String) {
                     .padding(horizontal = 16.dp)
             ) {
                 Spacer(Modifier.height(8.dp))
-
-                // Gambar besar
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -124,8 +122,6 @@ fun ArtikelDetailScreen(navController: NavController, articleId: String) {
                 }
 
                 Spacer(Modifier.height(20.dp))
-
-                // Konten artikel — justified
                 Text(
                     konten,
                     fontSize = 15.sp,

@@ -40,11 +40,8 @@ fun LaporanKategoriScreen(
     onKategoriSelected: (String, String) -> Unit
 ) {
     var expandedKategori by remember { mutableStateOf<String?>(null) }
-
-    // Auto-expand kategori yang di-preselect dari HomeScreen
     LaunchedEffect(preselectedCategory) {
         if (preselectedCategory.isNotEmpty()) {
-            // Match preselectedCategory (nama) ke id
             val matched = KategoriLaporan.list.find { kat ->
                 kat.nama.contains(preselectedCategory, ignoreCase = true) ||
                         preselectedCategory.contains(kat.nama, ignoreCase = true)

@@ -28,8 +28,6 @@ object MapHelpers {
         val centerX = width / 2f
         val circleRadius = 38f
         val circleCenterY = circleRadius + 8f
-
-        // Shadow di bawah pin
         val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         shadowPaint.color = Color.BLACK
         shadowPaint.alpha = 80
@@ -38,8 +36,6 @@ object MapHelpers {
             centerX + 18, height - 4f,
             shadowPaint
         )
-
-        // Bentuk teardrop (lingkaran + segitiga ke bawah)
         val pinPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         pinPaint.color = fillColor
         pinPaint.style = Paint.Style.FILL
@@ -50,18 +46,12 @@ object MapHelpers {
         path.lineTo(centerX + 22, circleCenterY + 12)
         path.close()
         canvas.drawPath(path, pinPaint)
-
-        // Lingkaran utama
         canvas.drawCircle(centerX, circleCenterY, circleRadius, pinPaint)
-
-        // Border putih luar
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         borderPaint.color = Color.WHITE
         borderPaint.style = Paint.Style.STROKE
         borderPaint.strokeWidth = 6f
         canvas.drawCircle(centerX, circleCenterY, circleRadius, borderPaint)
-
-        // Lingkaran kecil di tengah (dot putih)
         val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         dotPaint.color = innerDotColor
         canvas.drawCircle(centerX, circleCenterY, 12f, dotPaint)
@@ -80,19 +70,13 @@ object MapHelpers {
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val center = size / 2f
-
-        // Shadow halo
         val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         haloPaint.color = fillColor
         haloPaint.alpha = 60
         canvas.drawCircle(center, center, center - 4, haloPaint)
-
-        // Border putih
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         borderPaint.color = Color.WHITE
         canvas.drawCircle(center, center, center - 14, borderPaint)
-
-        // Lingkaran berwarna
         val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         fillPaint.color = fillColor
         canvas.drawCircle(center, center, center - 18, fillPaint)

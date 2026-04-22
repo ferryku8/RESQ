@@ -573,8 +573,6 @@ fun SosMapScreen(
             },
             update = { mv ->
                 mv.overlays.clear()
-
-                // Marker user (merah)
                 val userMarker = Marker(mv)
                 userMarker.position = GeoPoint(latitude, longitude)
                 userMarker.title = "Lokasi Anda"
@@ -583,8 +581,6 @@ fun SosMapScreen(
                 )
                 userMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                 mv.overlays.add(userMarker)
-
-                // Marker SEMUA petugas — warna berdasarkan role
                 respondingPetugas.forEach { p ->
                     if (p.lat != 0.0 && p.lng != 0.0) {
                         val color = when (p.role) {
@@ -603,8 +599,6 @@ fun SosMapScreen(
                         mv.overlays.add(marker)
                     }
                 }
-
-                // Center map to show all markers
                 if (!hasCenteredMap && respondingPetugas.any { it.lat != 0.0 }) {
                     val allLats = listOf(latitude) + respondingPetugas.map { it.lat }
                     val allLngs = listOf(longitude) + respondingPetugas.map { it.lng }
@@ -617,16 +611,12 @@ fun SosMapScreen(
                 mv.invalidate()
             }
         )
-
-        // Back button
         IconButton(
             onClick = onBackClick,
             modifier = Modifier.padding(top = 40.dp, start = 16.dp).background(Color.White, CircleShape).size(48.dp)
         ) {
             Icon(Icons.Default.ArrowBack, "Kembali", tint = Color.Black)
         }
-
-        // Status badge
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -639,8 +629,6 @@ fun SosMapScreen(
                 Text(statusText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
-
-        // Bottom card
         Card(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)),
@@ -648,8 +636,6 @@ fun SosMapScreen(
             elevation = CardDefaults.cardElevation(defaultElevation = 24.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(24.dp)) {
-                // Daftar petugas yang merespons
-                // Di dalam bottom card, ganti bagian daftar petugas:
                 if (respondingPetugas.isEmpty()) {
                     Text("Menunggu petugas merespons...", fontSize = 14.sp, color = Color.Gray)
                 } else {
@@ -667,8 +653,6 @@ fun SosMapScreen(
                             "completed" -> "Selesai"
                             else -> p.status
                         }
-
-                        // Hitung jarak per petugas
                         val distText = if (p.lat != 0.0 && latitude != 0.0) {
                             val dist = haversineDistance(p.lat, p.lng, latitude, longitude)
                             if (dist < 1000) "${dist.toInt()} m"
@@ -697,7 +681,6 @@ fun SosMapScreen(
                                     }
                                 }
                             }
-                            // Status badge
                             val badgeColor = when (p.status) {
                                 "arrived" -> Color(0xFF2196F3)
                                 "completed" -> Color(0xFF4CAF50)

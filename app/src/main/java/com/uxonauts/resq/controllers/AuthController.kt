@@ -26,19 +26,11 @@ class AuthController : ViewModel() {
 
     var isLoading by mutableStateOf(false)
     var errorMessage by mutableStateOf<String?>(null)
-
-    // State Login
     var loginEmail by mutableStateOf("")
     var loginPassword by mutableStateOf("")
-
-    // State Navigasi
     var currentSignUpStep by mutableStateOf(1)
-
-    // State PIN & Biometrik
     var pinCode by mutableStateOf("")
     var isBiometricEnabled by mutableStateOf(false)
-
-    // Step 1: Biodata
     var firstName by mutableStateOf("")
     var lastName by mutableStateOf("")
     var gender by mutableStateOf("Laki-laki")
@@ -47,21 +39,15 @@ class AuthController : ViewModel() {
     var phone by mutableStateOf("")
     var email by mutableStateOf("")
     var password by mutableStateOf("")
-
-    // Step 2: KTP
     var ktpImageUri by mutableStateOf<Uri?>(null)
     var isKtpValidating by mutableStateOf(false)
     var isKtpValid by mutableStateOf(false)
-
-    // Step 3: Medis
     var height by mutableStateOf("")
     var weight by mutableStateOf("")
     var bloodType by mutableStateOf("")
     var diseaseHistory by mutableStateOf("")
     var routineMeds by mutableStateOf("")
     var allergies by mutableStateOf("")
-
-    // Step 4: Kontak Darurat
     var ecFirstName by mutableStateOf("")
     var ecLastName by mutableStateOf("")
     var ecRelation by mutableStateOf("Keluarga")
@@ -72,8 +58,6 @@ class AuthController : ViewModel() {
     val ecRelationOptions = listOf("Keluarga", "Pasangan", "Teman", "Lainnya")
 
     val savedContacts = mutableStateListOf<EmergencyContact>()
-
-    // Validasi Step 1
     fun isStep1Valid(): Boolean {
         val isEmailValid = Patterns.EMAIL_ADDRESS.matcher(email).matches()
         return firstName.isNotBlank() &&
@@ -83,16 +67,10 @@ class AuthController : ViewModel() {
                 phone.isNotBlank() && isEmailValid &&
                 password.length >= 6
     }
-
-    // Validasi Step 2 — harus KTP valid dan tidak sedang validasi
     fun isStep2Valid(): Boolean = ktpImageUri != null && isKtpValid && !isKtpValidating
-
-    // Validasi Step 3
     fun isStep3Valid(): Boolean {
         return height.isNotBlank() && weight.isNotBlank() && bloodType.isNotBlank()
     }
-
-    // Validasi Kontak Darurat
     fun isStep4ContactValid(): Boolean {
         return ecFirstName.isNotBlank() && ecRelation.isNotBlank() && ecPhone.isNotBlank()
     }
@@ -203,11 +181,8 @@ class AuthController : ViewModel() {
             isLoading = true
             errorMessage = null
             try {
-                // 1. Buat Akun Firebase Auth
                 val authResult = auth.createUserWithEmailAndPassword(email, password).await()
                 val uid = authResult.user?.uid ?: throw Exception("Gagal mendapatkan ID")
-
-                // 2. Upload KTP ke Firebase Storage
                 var downloadUrl = ""
                 if (ktpImageUri != null) {
                     try {
@@ -220,8 +195,6 @@ class AuthController : ViewModel() {
                         Log.e("UploadKTP", "Gagal upload KTP umum: ${e.message}")
                     }
                 }
-
-                // 3. Simpan Data User Utama
                 val newUser = User(
                     userId = uid,
                     namaLengkap = "$firstName $lastName".trim(),
@@ -240,8 +213,6 @@ class AuthController : ViewModel() {
                     }
                 )
                 db.collection("users").document(uid).set(newUser).await()
-
-                // 4. Simpan Data Medis
                 val newMedInfo = MedicalInfo(
                     userId = uid,
                     golDarah = bloodType,
@@ -252,8 +223,6 @@ class AuthController : ViewModel() {
                     alergi = allergies
                 )
                 db.collection("medical_info").document(uid).set(newMedInfo).await()
-
-                // 5. Simpan Kontak Darurat
                 val allContactsToSave = savedContacts.toMutableList()
                 if (isStep4ContactValid() && !isSelfNumber()) {
                     allContactsToSave.add(

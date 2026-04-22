@@ -57,8 +57,6 @@ fun EditProfileScreen(
     var showAddContactDialog by remember { mutableStateOf(false) }
     var showPhotoSourceDialog by remember { mutableStateOf(false) }
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
-
-    // Helper bikin file temporary untuk hasil kamera
     fun createTempImageUri(ctx: Context): Uri {
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         val imageFileName = "PROFILE_${timeStamp}_"
@@ -70,13 +68,9 @@ fun EditProfileScreen(
             image
         )
     }
-
-    // Launcher Galeri
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri -> uri?.let { controller.uploadProfilePhoto(it) } }
-
-    // Launcher Kamera
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
@@ -84,8 +78,6 @@ fun EditProfileScreen(
             controller.uploadProfilePhoto(tempCameraUri!!)
         }
     }
-
-    // Launcher izin kamera
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -96,8 +88,6 @@ fun EditProfileScreen(
             Toast.makeText(context, "Izin kamera ditolak", Toast.LENGTH_SHORT).show()
         }
     }
-
-    // Toast messages
     LaunchedEffect(controller.successMessage, controller.errorMessage) {
         controller.successMessage?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
@@ -133,8 +123,6 @@ fun EditProfileScreen(
                 .padding(horizontal = 24.dp)
         ) {
             Spacer(Modifier.height(16.dp))
-
-            // Foto Profil
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
@@ -184,8 +172,6 @@ fun EditProfileScreen(
             }
 
             Spacer(Modifier.height(32.dp))
-
-            // Section Biodata
             SectionTitle("Biodata Diri")
             OutlinedTextField(
                 value = controller.editNamaLengkap,
@@ -215,8 +201,6 @@ fun EditProfileScreen(
             ) { Text("Simpan Biodata") }
 
             Spacer(Modifier.height(24.dp))
-
-            // Section Medis
             SectionTitle("Informasi Kesehatan")
             OutlinedTextField(
                 value = controller.editGolDarah,
@@ -268,8 +252,6 @@ fun EditProfileScreen(
             ) { Text("Simpan Kesehatan") }
 
             Spacer(Modifier.height(24.dp))
-
-            // Section Kontak Darurat
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -317,8 +299,6 @@ fun EditProfileScreen(
             Spacer(Modifier.height(40.dp))
         }
     }
-
-    // Dialog Tambah Kontak Darurat
     if (showAddContactDialog) {
         AddContactDialog(
             onDismiss = { showAddContactDialog = false },
@@ -328,8 +308,6 @@ fun EditProfileScreen(
             }
         )
     }
-
-    // Dialog Pilih Sumber Foto
     if (showPhotoSourceDialog) {
         AlertDialog(
             onDismissRequest = { showPhotoSourceDialog = false },

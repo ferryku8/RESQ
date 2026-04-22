@@ -47,13 +47,9 @@ fun ProfileScreen(
 ) {
     val context = LocalContext.current
     var showSettingsSheet by remember { mutableStateOf(false) }
-
-    // Refresh data setiap kali screen ini aktif (misal habis kembali dari edit)
     LaunchedEffect(Unit) {
         controller.fetchProfile()
     }
-
-    // Toast messages
     LaunchedEffect(controller.successMessage, controller.errorMessage) {
         controller.successMessage?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
@@ -100,7 +96,6 @@ fun ProfileScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
         ) {
-            // Icon Setting kanan atas
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
@@ -114,8 +109,6 @@ fun ProfileScreen(
                     )
                 }
             }
-
-            // Foto Profil
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
@@ -156,8 +149,6 @@ fun ProfileScreen(
             )
 
             Spacer(Modifier.height(32.dp))
-
-            // Section Biodata Diri
             ExpandableSection(
                 title = "Biodata Diri",
                 expanded = controller.biodataExpanded,
@@ -171,8 +162,6 @@ fun ProfileScreen(
             }
 
             Spacer(Modifier.height(12.dp))
-
-            // Section Informasi Kesehatan
             ExpandableSection(
                 title = "Informasi Kesehatan",
                 expanded = controller.medicalExpanded,
@@ -207,8 +196,6 @@ fun ProfileScreen(
             }
 
             Spacer(Modifier.height(12.dp))
-
-            // Section Nomor Darurat
             ExpandableSection(
                 title = "Nomor Darurat",
                 expanded = controller.emergencyExpanded,
@@ -252,8 +239,6 @@ fun ProfileScreen(
             Spacer(Modifier.height(120.dp))
         }
     }
-
-    // Bottom Sheet Settings
     if (showSettingsSheet) {
         ModalBottomSheet(
             onDismissRequest = { showSettingsSheet = false },

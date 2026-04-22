@@ -82,8 +82,6 @@ fun HomeScreen(
 
     var articles by remember { mutableStateOf<List<HomeArtikel>>(emptyList()) }
     var banners by remember { mutableStateOf<List<HomeBanner>>(emptyList()) }
-
-    // Ambil lebar layar untuk banner
     val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
     val bannerWidth = screenWidthDp - 32.dp // minus horizontal padding
 
@@ -117,8 +115,6 @@ fun HomeScreen(
                 }
             }
     }
-
-    // Ambil daftar kategori dari model untuk matching yang benar
     val kategoriList = remember { KategoriLaporan.list }
 
     Scaffold(
@@ -158,8 +154,6 @@ fun HomeScreen(
             Text(userName, fontSize = 22.sp, fontWeight = FontWeight.Bold)
 
             Spacer(Modifier.height(16.dp))
-
-            // Search bar + Riwayat + Notifikasi
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = searchQuery,
@@ -198,8 +192,6 @@ fun HomeScreen(
             }
 
             Spacer(Modifier.height(20.dp))
-
-            // FIX 1: Banner — explicit width agar tidak hilang di LazyRow
             if (banners.isNotEmpty()) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -243,8 +235,6 @@ fun HomeScreen(
                 }
                 Spacer(Modifier.height(24.dp))
             }
-
-            // Layanan Laporan + Lihat Semua
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -256,9 +246,6 @@ fun HomeScreen(
                 }
             }
             Spacer(Modifier.height(8.dp))
-
-            // FIX 2 & 3: Icon & nama SAMA persis dengan LaporanKategoriScreen
-            // Ambil 4 kategori utama yang mau ditampilkan di home
             val homeKategori = listOf(
                 kategoriList.find { it.id == "kejahatan" },
                 kategoriList.find { it.id == "lalulintas" },
@@ -282,7 +269,6 @@ fun HomeScreen(
                             color = colorForIndex(index),
                             modifier = Modifier.weight(1f)
                         ) {
-                            // Pass nama PERSIS dari model — pasti match
                             onLaporanCategoryClick(kat.nama)
                         }
                     } else {
@@ -295,8 +281,6 @@ fun HomeScreen(
             }
 
             Spacer(Modifier.height(24.dp))
-
-            // Artikel
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -344,8 +328,6 @@ fun HomeScreen(
         }
     }
 }
-
-// Icon mapping — SAMA PERSIS dengan LaporanKategoriScreen
 private fun iconForKategori(id: String): ImageVector {
     return when (id) {
         "kejahatan" -> Icons.Default.LocalPolice

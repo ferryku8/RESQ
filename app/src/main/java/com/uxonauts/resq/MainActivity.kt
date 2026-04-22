@@ -23,7 +23,6 @@ class MainActivity : FragmentActivity() {
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        // Setelah lokasi di-handle, minta notifikasi
         requestNotificationPermission()
     }
 
@@ -35,8 +34,6 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // MINTA IZIN LOKASI SAAT PERTAMA BUKA
         requestLocationPermission()
 
         setContent {

@@ -26,20 +26,15 @@ import com.uxonauts.resq.views.ui.theme.ResqBlue
 @Composable
 fun LoginScreen(navController: NavController, controller: AuthController) {
     val context = LocalContext.current
-
-    // Local validation errors
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
 
     fun validateAndLogin() {
-        // Reset errors
         emailError = null
         passwordError = null
         controller.errorMessage = null
 
         var hasError = false
-
-        // Validasi email
         if (controller.loginEmail.isBlank()) {
             emailError = "Email tidak boleh kosong"
             hasError = true
@@ -47,8 +42,6 @@ fun LoginScreen(navController: NavController, controller: AuthController) {
             emailError = "Format email tidak valid"
             hasError = true
         }
-
-        // Validasi password
         if (controller.loginPassword.isBlank()) {
             passwordError = "Kata sandi tidak boleh kosong"
             hasError = true
@@ -87,8 +80,6 @@ fun LoginScreen(navController: NavController, controller: AuthController) {
 
         Text("Masuk", fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(24.dp))
-
-        // Email field
         OutlinedTextField(
             value = controller.loginEmail,
             onValueChange = {
@@ -109,8 +100,6 @@ fun LoginScreen(navController: NavController, controller: AuthController) {
         )
 
         Spacer(modifier = Modifier.height(8.dp))
-
-        // Password field
         OutlinedTextField(
             value = controller.loginPassword,
             onValueChange = {
@@ -130,8 +119,6 @@ fun LoginScreen(navController: NavController, controller: AuthController) {
             },
             singleLine = true
         )
-
-        // Firebase error (email/password salah, akun tidak ditemukan, dll)
         if (controller.errorMessage != null) {
             Spacer(modifier = Modifier.height(8.dp))
             Card(

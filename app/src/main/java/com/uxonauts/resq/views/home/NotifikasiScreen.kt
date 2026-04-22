@@ -51,8 +51,6 @@ fun NotifikasiScreen(navController: NavController) {
             return@LaunchedEffect
         }
         val allNotifs = mutableListOf<NotifItem>()
-
-        // 1. Notifikasi SOS dari kontak darurat — TANPA orderBy
         firestore.collection("emergency_notifications")
             .whereEqualTo("targetUserId", uid)
             .get()
@@ -73,8 +71,6 @@ fun NotifikasiScreen(navController: NavController) {
                         )
                     )
                 }
-
-                // 2. Update progress laporan milik user — TANPA orderBy
                 firestore.collection("reports")
                     .whereEqualTo("userId", uid)
                     .get()
@@ -90,8 +86,6 @@ fun NotifikasiScreen(navController: NavController) {
                             val progressNotes =
                                 (doc.get("progressNotes") as? List<Map<String, Any>>)
                                     ?: emptyList()
-
-                            // Notif untuk status diterima
                             if (status != "Menunggu") {
                                 val tanggalLapor = doc.getTimestamp("tanggalLapor")
                                 val dateStr =
@@ -107,8 +101,6 @@ fun NotifikasiScreen(navController: NavController) {
                                     )
                                 )
                             }
-
-                            // Notif untuk setiap progress update
                             progressNotes.forEachIndexed { index, note ->
                                 if (index > 0) {
                                     val noteText = note["note"] as? String ?: ""
@@ -128,8 +120,6 @@ fun NotifikasiScreen(navController: NavController) {
                                 }
                             }
                         }
-
-                        // Sort terbaru dulu
                         notifs = allNotifs.sortedByDescending { it.sortTimestamp }
                         loading = false
                     }

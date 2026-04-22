@@ -56,7 +56,6 @@ class ArticleController : ViewModel() {
                     else articles.add(item)
                 }
             } catch (e: Exception) {
-                // silent fail, list kosong
             } finally {
                 isLoading = false
             }

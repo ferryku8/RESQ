@@ -37,8 +37,6 @@ fun OnboardingScreen(navController: NavController) {
 
     if (isFirstTime) {
         var currentPage by remember { mutableStateOf(1) }
-
-        // Menggunakan Box untuk memastikan seluruh area tertutup background #FBFBFB
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -52,7 +50,6 @@ fun OnboardingScreen(navController: NavController) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                // 1. Gambar (Ditempatkan di tengah atas grup konten)
                 Image(
                     painter = painterResource(
                         id = when (currentPage) {
@@ -69,8 +66,6 @@ fun OnboardingScreen(navController: NavController) {
                 )
 
                 Spacer(modifier = Modifier.height(32.dp))
-
-                // 2. Judul
                 Text(
                     text = when (currentPage) {
                         1 -> "SOS Darurat Cepat"
@@ -84,8 +79,6 @@ fun OnboardingScreen(navController: NavController) {
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
-
-                // 3. Deskripsi
                 Text(
                     text = when (currentPage) {
                         1 -> "Tekan tombol SOS saat darurat. Lokasi & info Anda langsung terkirim ke pihak berwenang dan kontak darurat terdekat."
@@ -100,8 +93,6 @@ fun OnboardingScreen(navController: NavController) {
                 )
 
                 Spacer(modifier = Modifier.height(48.dp))
-
-                // 4. Tombol Lanjutkan (Berada di tengah bawah grup konten)
                 Button(
                     onClick = {
                         if (currentPage < 3) {

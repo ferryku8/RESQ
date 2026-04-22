@@ -53,8 +53,6 @@ fun RiwayatScreen(navController: NavController) {
             return@LaunchedEffect
         }
         val allItems = mutableListOf<RiwayatItem>()
-
-        // Fetch laporan — TANPA orderBy (hindari composite index)
         firestore.collection("reports")
             .whereEqualTo("userId", uid)
             .get()
@@ -72,8 +70,6 @@ fun RiwayatScreen(navController: NavController) {
                         )
                     )
                 }
-
-                // Fetch SOS — TANPA orderBy
                 firestore.collection("sos_alerts")
                     .whereEqualTo("userId", uid)
                     .get()
@@ -99,7 +95,6 @@ fun RiwayatScreen(navController: NavController) {
                                 )
                             )
                         }
-                        // Sort di memory — terbaru dulu
                         items = allItems.sortedByDescending {
                             it.timestamp?.seconds ?: 0
                         }
